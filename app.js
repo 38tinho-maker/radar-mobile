@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.11';
+const VERSION = '1.0.12';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -190,12 +190,13 @@ function posView() {
     const roe = t.margin ? t.upnl / t.margin : null;
     const nx = L.pend[0] || null;
     return { t, p, L, pl: t.upnl, roe, val: t.value || (p ? t.qty * p : 0), liqD: t.liq && p ? Math.abs(t.liq - p) / p : Infinity,
-      slD: t.sl && p ? Math.abs(p - t.sl) / p : Infinity, tpD: nx && p ? Math.abs(nx.px - p) / p : Infinity, tpN: nx && L.levels.length > 1 ? nx.n : null };
+      // quanto do caminho entrada → SL (ou → próximo TP) o preço já percorreu (0 = na entrada, 1 = chegou)
+      slP: t.sl && p && t.sl !== t.entry ? (p - t.entry) / (t.sl - t.entry) : null, tpP: nx && p && nx.px !== t.entry ? (p - t.entry) / (nx.px - t.entry) : null, tpN: nx && L.levels.length > 1 ? nx.n : null };
   });
   let tPl = 0, tSl = 0, tTp = 0, nSl = 0, nTp = 0;
   for (const r of rows) { tPl += r.pl || 0; if (r.L.ifSl != null) { tSl += r.L.ifSl - r.L.realized; nSl++; } if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0); nTp++; } }
   const k = S.sort.k, d = S.sort.d;
-  const key = { nsl: (r) => r.slD, ntp: (r) => r.tpD, pnl: (r) => r.pl || 0, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
+  const key = { nsl: (r) => (r.slP == null ? Infinity : -r.slP), ntp: (r) => (r.tpP == null ? Infinity : -r.tpP), pnl: (r) => r.pl || 0, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
   rows.sort((a, b) => { const x = key(a), y = key(b); if (x === Infinity || y === Infinity) return (x === Infinity) - (y === Infinity); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d; });
   const chip = (kk, l) => `<button class="chip${k === kk ? ' on' : ''}" data-sort="${kk}">${l}${k === kk ? (d > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   return `<section class="tiles"><div class="tile"><span>${tr('tab.pos')}</span><b>${rows.length}</b></div><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
@@ -215,9 +216,9 @@ function marginBar(a) {
   return `<div class="mg"><div class="mgt"><span>${tr('mg.used')} <b>${usd(used, false)}</b> <em class="${lvl}">${Math.round(f * 100)}%</em></span><span>${tr('mg.free')} <b>${usd(free, false)}</b></span></div>
     <div class="mgb">${seg(0, 0.7, '')}${seg(0.7, 0.9, 'mid')}${seg(0.9, 1, 'hi')}<i style="left:70%"></i><i style="left:90%"></i></div></div>`;
 }
-function card({ t, p, L, pl, roe, liqD, slD, tpD, tpN }) {
-  const pc = (v) => fmt1(v * 100) + '%', hk = S.sort.k;
-  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : ''}">${isFinite(slD) ? tr('distSl', { p: pc(slD) }) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${isFinite(tpD) ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpD) }) : tr('noTp')}</span></div>`;
+function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN }) {
+  const pc = (v) => (v > 1 ? '> 100' : String(Math.round(Math.max(0, v) * 100))) + '%', hk = S.sort.k;
+  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : ''}">${slP != null ? tr('distSl', { p: pc(slP) }) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) : tr('noTp')}</span></div>`;
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
   const partial = t.parts?.length;
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
