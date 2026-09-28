@@ -135,3 +135,23 @@ article .h .now.pos b, article .h .now.pos em { color: var(--teal); } article .h
 .txl .txg { flex: 1; display: flex; gap: 2px; margin-left: 2px; min-width: 0; }
 .txl .t-rk { flex: none; color: #ffd2db; } .txl .t-gn { color: #d2faf3; }
 .txl .t-dn { color: #0b1216; font-weight: 700; text-shadow: none; } .txl .t-un { color: var(--head); font-weight: 500; }
+
+/* v1.0.10: Finalizados */
+.finh { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; margin-top: 6px; }
+.finh b:first-child { font-size: 15px; }
+article.fc { border: 2px solid #8a9695; border-left-width: 2px; background: var(--pan); }
+article.fc.tp { border-color: var(--teal); background: linear-gradient(rgba(80,210,193,.07), rgba(80,210,193,.07)), var(--pan); }
+article.fc.sl { border-color: var(--red); background: linear-gradient(rgba(237,112,136,.08), rgba(237,112,136,.08)), var(--pan); }
+.fct { display: flex; align-items: center; }
+.fsel { display: inline-block; width: 112px; text-align: center; border-radius: 9px; font: 700 10.5px/16px var(--sans); letter-spacing: .4px; background: #2a2f36; color: #c9d1d0; }
+.fsel.tp { background: var(--teal); color: #0b1216; } .fsel.sl { background: var(--red); color: #0b1216; }
+.fxb { border: 0; background: none; color: var(--mut); font-size: 18px; line-height: 1; padding: 0 2px; }
+article.fc .h.lg > b:first-child, article.fc .h.lg > span:nth-child(2) { color: var(--teal); }
+article.fc .h.sh > b:first-child, article.fc .h.sh > span:nth-child(2) { color: var(--red); }
+.tpb.fz { padding-top: 18px; }
+.tpb.fz .rk.hit { background: rgba(237,112,136,.55); }
+.fxm { position: absolute; top: -3px; width: 2px; height: 24px; margin-left: -1px; z-index: 4; }
+.fxm.up { background: var(--teal); } .fxm.dn { background: var(--red); }
+.fxm b { position: absolute; top: -16px; left: -7px; width: 16px; height: 14px; border-radius: 3px; font: 700 10px/14px sans-serif; text-align: center; color: #0b1216; }
+.fxm.up b { background: var(--teal); } .fxm.dn b { background: var(--red); }
+.finall { align-self: center; border: 1px solid var(--line); background: none; color: var(--head); border-radius: 6px; padding: 7px 14px; font-size: 13px; }

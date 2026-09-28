@@ -6,8 +6,9 @@ import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice, setPriceLocale } from './lib/format.js';
 import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/i18n.js';
 import { extStore, bestWorst } from './lib/runext.js';
+import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.8';
+const VERSION = '1.0.10';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -18,7 +19,7 @@ const ls = {
 // idioma: o salvo, ou o do celular na primeira vez
 function applyLang(l) { setLang(l); setPriceLocale(loc()); }
 applyLang(ls.get('lang') || defaultLang());
-const S = { addr: ls.get('addr'), meta: ls.get('meta', {}), metaAt: ls.get('metaAt'), tab: 'pos', sort: ls.get('sort', { k: 'pnl', d: 1 }), open: new Set(), data: null, err: null, loading: false, at: 0, histDays: 30 };
+const S = { fin: ls.get('fin') || (() => { const f = { since: Date.now() - 86400e3, hidden: [] }; ls.set('fin', f); return f; })(), addr: ls.get('addr'), meta: ls.get('meta', {}), metaAt: ls.get('metaAt'), tab: 'pos', sort: ls.get('sort', { k: 'pnl', d: 1 }), open: new Set(), data: null, err: null, loading: false, at: 0, histDays: 30 };
 
 // ---------- formatos ----------
 const br = (v, d = 2) => (v == null || !isFinite(v) ? '—' : Math.abs(v).toLocaleString(loc(), { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -29,7 +30,8 @@ const pct = (v, d = 1) => (v == null || !isFinite(v) ? '—' : `${sgn(v)}${Math.
 const cls = (v) => (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
 const coin = (t) => t.symbol.replace(/^HL:/, '');
 const qty = (q) => q.toLocaleString(loc(), { maximumFractionDigits: q >= 100 ? 2 : q >= 1 ? 4 : 6 });
-const ago = (ts) => { const s = Math.round((Date.now() - ts) / 1000); return s < 60 ? tr('ago.s', { n: s }) : s < 3600 ? tr('ago.m', { n: Math.round(s / 60) }) : tr('ago.h', { n: Math.round(s / 3600) }); };
+const ago = (ts) => { const s = Math.round((Date.now() - ts) / 1000); return s < 60 ? tr('ago.s', { n: s }) : s < 3600 ? tr('ago.m', { n: Math.round(s / 60) }) : s < 86400 * 2 ? tr('ago.h', { n: Math.round(s / 3600) }) : tr('ago.d', { n: Math.round(s / 86400) }); };
+const dur = (ms) => { const m = Math.max(0, Math.round(ms / 60000)); if (m < 60) return `${m}min`; const h = Math.floor(m / 60); if (h < 24) return m % 60 ? `${h}h ${m % 60}min` : `${h}h`; return `${Math.floor(h / 24)}d ${h % 24}h`; };
 const dt = (ts) => { if (!ts) return '—'; const d = new Date(ts); const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; return lang() === 'en' ? `${month(d.getMonth())} ${d.getDate()} ${hm}` : `${d.getDate()} ${month(d.getMonth())} ${hm}`; };
 const SRC = (k) => (['visto', 'scanner', 'recon', 'plano', 'card', 'manual'].includes(k) ? tr('src.' + k) : null);
 const fmt1 = (v) => v.toLocaleString(loc(), { maximumFractionDigits: 1 });
@@ -46,6 +48,18 @@ async function load() {
     ]);
     const raw = { fills: fills.map(slimFill), funding: fund.filter((f) => f.delta?.usdc != null).map(slimFund), since };
     const { trades } = buildTrades(raw, state, orders);
+    // guarda o TP/SL de cada posição aberta; quando ela fecha, o trade herda e diz se saiu no TP ou no stop
+    const memo = ls.get('memo', {});
+    const near = (a, b) => a && b && Math.abs(a - b) / b < 0.004;
+    for (const t of trades) {
+      if (t.status === 'open') { memo[t.id] = { tp: t.tp || null, sl: t.sl || null, tps: t.tps || [], lev: t.lev || null, margin: t.margin || null, ts: Date.now() }; continue; }
+      const m = memo[t.id]; if (!m) continue;
+      t.tp = m.tp; t.sl = m.sl; t.tps = m.tps || []; t.lev = m.lev || t.lev; t.margin = m.margin || t.margin;
+      const last = t.parts?.length ? t.parts[t.parts.length - 1].px : t.exit;
+      if (near(last, m.sl)) t.closeReason = 'stop'; else if (near(last, m.tp) || (m.tps || []).some((x) => near(last, x.px))) t.closeReason = 'alvo';
+    }
+    for (const k in memo) if (Date.now() - memo[k].ts > 120 * 86400e3) delete memo[k];
+    ls.set('memo', memo);
     S.data = {
       market, trades, orders: (orders || []).map(slimOrder), rate: fees ? +fees.userCrossRate : 0.00045,
       account: { value: +state.marginSummary.accountValue, margin: +state.marginSummary.totalMarginUsed, free: +state.withdrawable },
@@ -184,7 +198,8 @@ function posView() {
     ${marginBar(account)}
     <div class="tot">${nSl ? `${tr('allSl')} <b class="neg">${num(tSl)}</b>` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
     <div class="sorts">${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div>
-    ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}`;
+    ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}
+    ${finView()}`;
 }
 // margem usada (soma das posições) e o que sobra livre; a barra fica laranja acima de 70% da conta e vermelha acima de 90%
 function marginBar(a) {
@@ -206,6 +221,42 @@ function card({ t, p, L, pl, roe, liqD }) {
     <div class="f"><span>${tr('size')} <b>${qty(t.qty)} ${esc(coin(t))}</b>${partial ? ` <small>${tr('of', { q: qty(origQty(t)) })}</small>` : ''}</span></div>
     ${op ? detail(t, p, L) : ''}</article>`;
 }
+// ---------- Finalizados: ficam até você dispensar ----------
+function finView() {
+  const list = finList(S.data.trades.filter((t) => t.status === 'closed').map(withMeta), S.fin);
+  if (!list.length) return '';
+  const tot = list.reduce((a, t) => a + (finResult(t) || 0), 0);
+  return `<div class="finh"><b>${tr('fin.title')}</b><span class="muted">${list.length}</span><span class="grow"></span><b class="${cls(tot)} mono">${usd(tot)}</b></div>
+    ${list.map(finCard).join('')}<button class="finall" data-fin="all">${tr('fin.all')}</button>`;
+}
+function finCard(t) {
+  const K = finKind(t), res = finResult(t), lab = { tp: K.label === 'TP' ? 'fin.tp' : 'fin.tpp', sl: 'fin.sl', man: 'fin.man', unk: 'fin.unk' }[K.k];
+  const side = t.dir === 'baixa' ? 'sh' : 'lg';
+  return `<article class="fc ${K.k}" data-id="${esc(t.id)}"><div class="fct"><span class="fsel ${K.k}">${tr(lab)}</span><span class="grow"></span><button class="fxb" data-fin-x="${esc(t.id)}" title="${tr('fin.x')}" aria-label="${tr('fin.x')}">×</button></div>
+    <div class="h ${side}"><b>${esc(coin(t))}</b><span>${t.lev ? fmt1(t.lev) + 'x · ' : ''}${sideTxt(t)}</span><span class="grow"></span><span class="now ${cls(res)}"><small>${tr('fin.final')}</small><b>${usd(res)}</b> <em>${t.margin && res != null ? pct(res / t.margin) : ''}</em></span></div>
+    ${finBar(t)}
+    <div class="f"><span>${tr('fin.closed', { t: ago(t.closedAt) })}</span><span>${t.openedAt ? tr('fin.lasted', { d: dur(t.closedAt - t.openedAt) }) : ''}</span><span>${qty(t.qty)} ${esc(coin(t))}</span></div></article>`;
+}
+// barra congelada no preço de saída (✓ lucro, ✕ perda)
+function finBar(t) {
+  const M = finModel(t);
+  if (!M.sl) return `<div class="tpn"><span class="muted">${tr('entry')}</span> <b class="mono">${fmtPrice(t.entry)}</b> → <span class="muted">${tr('fin.exit')}</span> <b class="mono">${fmtPrice(M.exitPx)}</b></div>`;
+  const w = W();
+  const RED = Math.max(0.22, Math.min(0.42, (fmtPrice(M.sl).length * 6.4 + 8) / w));
+  const posAt = finPosAt(t, M, RED), ex = posAt(M.exitPx);
+  const tot = M.segs.reduce((a, g) => a + g.w, 0) || 1;
+  const segs = M.segs.length ? M.segs.map((g) => `<div class="pg${g.done ? ' dn' : ''}" style="flex:${(g.w / tot).toFixed(4)}"></div>`).join('') : '<div class="pg" style="flex:1"></div>';
+  const txs = M.segs.map((g) => { const fr = (1 - RED) * g.w / tot; const tx = inTxt(g.net, fr - (g.done ? 0.04 : 0)); return `<span class="${g.done ? 't-dn' : 't-gn'}" style="flex:${(g.w / tot).toFixed(4)}">${g.done && tx ? '✓' : ''}${tx}</span>`; }).join('');
+  const hit = M.lossNet != null && M.lossNet < 0;
+  const redTx = hit ? (inTxt(M.lossNet, RED - 0.05) ? '✕ ' + inTxt(M.lossNet, RED - 0.05) : '') : inTxt(M.risk, RED);
+  const k = M.exitWin ? 'up' : 'dn', a = Math.min(RED, ex), wd = Math.abs(ex - RED);
+  const nA = M.nAll, sub = nA > 1 ? tr('tpsOf', { d: M.nDone, a: nA }) : finKind(t).k === 'tp' ? 'TP' : '';
+  return `<div class="tpb fz"><div class="trk"><div class="rk${hit ? ' hit' : ''}" style="width:${RED * 100}%"></div><div class="pgs">${segs}</div>
+    ${wd > 0.002 ? `<div class="trav ${k}" style="left:${(a * 100).toFixed(2)}%;width:${(wd * 100).toFixed(2)}%"></div>` : ''}
+    <div class="txl"><span class="t-rk" style="width:${RED * 100}%">${redTx}</span><div class="txg">${txs}</div></div>
+    <i class="en" style="left:${RED * 100}%"></i><i class="fxm ${k}" style="left:${(ex * 100).toFixed(1)}%"><b>${M.exitWin ? '✓' : '✕'}</b></i></div>
+    ${labels(t, M.sl, RED, M.lastPx != null ? fmtPrice(M.lastPx) : '—', sub)}</div>`;
+}
 function detail(t, p, L) {
   const mg = t.margin;
   const dist = (px) => (p ? tr('away', { p: fmt1(Math.abs(px - p) / p * 100) + '%' }) : '');
@@ -216,7 +267,7 @@ function detail(t, p, L) {
     <div class="g2"><div class="box"><span>${tr('ifSl')}</span><b class="${cls(L.ifSl)}">${L.ifSl != null ? usd(L.ifSl) : tr('noSl')}</b><small>${L.ifSl != null && mg ? tr('onMargin', { p: pct(L.ifSl / mg) }) : ''}</small></div>
     <div class="box"><span>${tr('ifAll')}</span><b class="${cls(L.ifAll)}">${L.ifAll != null ? usd(L.ifAll) : tr('noTp')}</b><small>${L.rrAvg != null ? tr('rr', { v: fmt1(L.rrAvg) }) : ''}</small></div></div>
     ${L.realized ? `<div class="muted">${tr('realized')} <b class="${cls(L.realized)}">${usd(L.realized)}</b></div>` : ''}
-    ${L.lockHint ? `<div class="warn">${tr('lock', { e: fmtPrice(t.entry), v: usd(L.realized) })}</div>` : ''}
+    ${L.lockHint ? `<div class="warn">${tr('lock', { l: usd(slLeg), a: usd(L.ifSl), e: fmtPrice(t.entry), v: usd(L.realized - t.entry * L.rest * S.data.rate) })}</div>` : ''}
     <table>${L.levels.map(row).join('')}${t.sl != null ? `<tr><td class="neg">SL</td><td>${fmtPrice(t.sl)}</td><td class="muted">${tr(L.done.length ? 'rest' : 'all')}</td><td class="${cls(slLeg)}">${num(slLeg)}</td><td class="muted">${dist(t.sl)}</td></tr>` : ''}</table>
     <div class="row muted"><span>${tr('entryAt', { p: fmtPrice(t.entry), d: t.openedAt ? dt(t.openedAt) : tr('before90') })}</span><span>${tr('fees', { f: usd(fee, false), g: usd(t.funding || 0) })}</span></div>
     ${t.patternName ? `<div class="row"><span class="selo">${esc(patName(t.patternName))}${t.tf ? ' · ' + esc(t.tf) : ''}${SRC(t.linkSrc) ? ' · ' + SRC(t.linkSrc) : ''}</span>${S.metaAt ? `<small class="muted">${tr('fromBackup', { d: dt(S.metaAt) })}</small>` : ''}</div>` : ''}
@@ -262,6 +313,8 @@ function bind() {
     ls.set('sort', S.sort); render();
   }));
   document.querySelectorAll('[data-days]').forEach((b) => (b.onclick = () => { S.histDays = +b.dataset.days; render(); }));
+  document.querySelectorAll('[data-fin-x]').forEach((b) => (b.onclick = () => { S.fin = { ...S.fin, hidden: [...(S.fin.hidden || []), b.dataset.finX].slice(-500) }; ls.set('fin', S.fin); render(); }));
+  const fa = $('[data-fin=all]'); if (fa) fa.onclick = () => { S.fin = { since: Date.now(), hidden: [] }; ls.set('fin', S.fin); render(); };
   document.querySelectorAll('article.pc').forEach((a) => (a.onclick = () => { const id = a.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); render(); }));
   const out = $('#out'); if (out) out.onclick = () => { if (!confirm(tr('confirmOut'))) return; S.addr = null; S.data = null; ls.del('addr'); render(); };
   const clr = $('#clrm'); if (clr) clr.onclick = () => { S.meta = {}; S.metaAt = null; ls.del('meta'); ls.del('metaAt'); render(); };
