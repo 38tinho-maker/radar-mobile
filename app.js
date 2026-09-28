@@ -5,7 +5,7 @@ import { slimFill, slimFund, slimOrder, buildTrades } from './lib/hltrades.js';
 import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice } from './lib/format.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.2';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -51,7 +51,8 @@ async function load() {
 const withMeta = (t) => { const m = S.meta[t.id] || {}; return { ...t, patternName: m.patternName || null, tf: m.tf || null, linkSrc: m.patternName ? (m.auto ? m.src : m.src || 'manual') : null }; };
 
 // ---------- barra TP/SL (igual à Carteira) ----------
-const W = () => Math.max(240, Math.min(520, window.innerWidth - 50));
+// largura real da barra: tela − margens da página (12+12) − recuo do card (12+12) − bordas (3+1)
+const W = () => Math.max(220, Math.min(560, (document.documentElement.clientWidth || window.innerWidth) - 56));
 function inTxt(v, frac) { if (v == null || !isFinite(v)) return ''; const t = num(v); return t.length * 6.2 + 8 <= frac * W() ? t : ''; }
 function tag(pos, pl, roe) {
   if (pos == null) return '';
@@ -150,9 +151,18 @@ function posView() {
   rows.sort((a, b) => { const x = key(a), y = key(b); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d; });
   const chip = (kk, l) => `<button class="chip${k === kk ? ' on' : ''}" data-sort="${kk}">${l}${k === kk ? (d > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   return `<section class="tiles"><div class="tile"><span>Valor da conta</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>PNL aberto</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
+    ${marginBar(account)}
     <div class="tot">${nSl ? `todos os SL <b class="neg">${num(tSl)}</b>` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `todos os TPs <b class="pos">${num(tTp)}</b>` : ''}</div></section>
     <div class="sorts">${chip('pnl', 'PNL')}${chip('mkt', 'Mercado')}${chip('size', 'Tamanho')}${chip('liq', 'Liq.')}${chip('margin', 'Margem')}${chip('funding', 'Funding')}</div>
     ${rows.length ? rows.map(card).join('') : '<div class="empty">Nenhuma posição aberta.</div>'}`;
+}
+// margem usada (soma das posições) e o que sobra livre; a barra fica laranja acima de 70% da conta e vermelha acima de 90%
+function marginBar(a) {
+  if (!a?.value) return '';
+  const used = a.margin || 0, f = Math.max(0, Math.min(1, used / a.value)), free = Math.max(0, a.value - used);
+  const lvl = f > 0.9 ? 'hi' : f > 0.7 ? 'mid' : '';
+  return `<div class="mg"><div class="mgt"><span>Margem usada <b>${usd(used, false)}</b> <em class="${lvl}">${Math.round(f * 100)}%</em></span><span>livre <b>${usd(free, false)}</b></span></div>
+    <div class="mgb"><div class="${lvl}" style="width:${(f * 100).toFixed(1)}%"></div></div></div>`;
 }
 function card({ t, p, L, pl, roe, liqD }) {
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
