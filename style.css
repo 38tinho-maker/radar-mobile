@@ -97,3 +97,13 @@ article .f small { color: var(--mut); } article .f small.warn { color: var(--org
 .mgb div { position: absolute; top: 0; height: 6px; background: var(--teal); } .mgb div.mid { background: var(--org); } .mgb div.hi { background: var(--red); }
 .mgb i { position: absolute; top: 0; width: 1px; height: 6px; background: rgba(11,18,22,.8); }
 .upd { white-space: nowrap; }
+
+/* trecho percorrido e Máx/Mín desde a entrada */
+.trav { position: absolute; top: 0; height: 18px; z-index: 0; pointer-events: none; }
+.trav.up { background: rgba(80,210,193,.45); } .trav.dn { background: rgba(237,112,136,.6); }
+.rk, .pgs { position: relative; z-index: 1; }
+.en { z-index: 2; }
+.xm { position: absolute; top: -3px; height: 24px; border-left: 2px dotted; z-index: 2; }
+.xm.up { border-color: var(--teal); color: var(--teal); } .xm.dn { border-color: var(--red); color: var(--red); }
+.xm span { position: absolute; top: 23px; left: 0; transform: translateX(-50%); font: 600 9.5px var(--sans); white-space: nowrap; }
+.lb.ext { margin-top: 14px; }

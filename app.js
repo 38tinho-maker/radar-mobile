@@ -5,7 +5,7 @@ import { slimFill, slimFund, slimOrder, buildTrades } from './lib/hltrades.js';
 import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice } from './lib/format.js';
 
-const VERSION = '1.0.3';
+const VERSION = '1.0.5';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -80,26 +80,27 @@ function bar(t, p, pl, roe, L) {
   const unc = L.uncovered / (L.orig || 1);
   if (unc > 0.005) segs.push({ w: unc, px: null, unc: true });
   const tot = segs.reduce((a, x) => a + x.w, 0) || 1;
-  let pos = null;
-  if (p) {
-    const d = s * (p - t.entry);
-    if (d <= 0) pos = RED * (1 - Math.min(1, -d / Math.abs(t.entry - sl)));
-    else {
-      pos = RED; let prev = t.entry;
-      for (const g of segs) {
-        const gw = (1 - RED) * g.w / tot;
-        if (g.px == null) break;
-        const span = s * (g.px - prev), k = span > 0 ? (s * (p - prev)) / span : 1;
-        if (k >= 1) { pos += gw; prev = g.px; continue; }
-        pos += gw * Math.max(0, k); break;
-      }
-      pos = Math.min(pos, 1);
+  const posAt = (q) => {
+    const d = s * (q - t.entry);
+    if (d <= 0) return RED * (1 - Math.min(1, -d / Math.abs(t.entry - sl)));
+    let x = RED, prev = t.entry;
+    for (const g of segs) {
+      const gw = (1 - RED) * g.w / tot;
+      if (g.px == null) break;
+      const span = s * (g.px - prev), k = span > 0 ? (s * (q - prev)) / span : 1;
+      if (k >= 1) { x += gw; prev = g.px; continue; }
+      return Math.min(1, x + gw * Math.max(0, k));
     }
-  }
+    return Math.min(x, 1);
+  };
+  const pos = p ? posAt(p) : null;
+  // trecho percorrido (entrada → preço) e Máx/Mín desde a entrada
+  const trav = pos != null && Math.abs(pos - RED) > 0.002 ? `<div class="trav ${pos >= RED ? 'up' : 'dn'}" style="left:${(Math.min(RED, pos) * 100).toFixed(2)}%;width:${(Math.abs(pos - RED) * 100).toFixed(2)}%"></div>` : '';
+
   const slV = L.ifSl != null ? L.ifSl - L.realized : null;
   const html = segs.map((g) => { const fr = (1 - RED) * g.w / tot; const tx = g.unc ? (fr * w > 44 ? 'sem TP' : '') : inTxt(g.net, fr - (g.done ? 0.04 : 0)); return `<div class="pg${g.done ? ' dn' : ''}${g.unc ? ' un' : ''}" style="flex:${(g.w / tot).toFixed(4)}">${g.done && tx ? '✓' : ''}${tx}</div>`; }).join('');
   const nD = L.done.length, nA = L.levels.length, last = L.pend.length ? L.pend[L.pend.length - 1].px : L.levels[nA - 1].px;
-  return `<div class="tpb"><div class="trk"><div class="rk" style="width:${RED * 100}%">${inTxt(slV, RED)}</div><div class="pgs">${html}</div><i class="en" style="left:${RED * 100}%"></i>${tag(pos, pl, roe)}</div>
+  return `<div class="tpb"><div class="trk">${trav}<div class="rk" style="width:${RED * 100}%">${inTxt(slV, RED)}</div><div class="pgs">${html}</div><i class="en" style="left:${RED * 100}%"></i>${tag(pos, pl, roe)}</div>
     ${labels(t, sl, RED, fmtPrice(last), nA > 1 ? (nD ? `${nD} de ${nA} TPs` : `${nA} TPs`) : '')}</div>`;
 }
 
