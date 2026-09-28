@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.10';
+const VERSION = '1.0.11';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -138,12 +138,14 @@ function bar(t, p, pl, roe, L) {
 }
 
 // ---------- telas ----------
+const updTxt = () => (S.loading ? `<span class="spin"></span> ${tr('upd.loading')}` : S.at ? `${tr('upd.at', { t: ago(S.at) })} ↻` : '↻');
+// o "atualizado há X s" conta segundo a segundo (sem redesenhar a tela)
+setInterval(() => { const el = $('#ref'); if (el && S.addr && !S.loading) el.innerHTML = updTxt(); }, 1000);
 function render() {
   const app = $('#app');
   if (!S.addr) { app.innerHTML = setupView(); bindSetup(); return; }
   const body = S.tab === 'pos' ? posView() : S.tab === 'ord' ? ordView() : S.tab === 'hist' ? histView() : cfgView();
-  const n = S.data ? S.data.trades.filter((t) => t.status === 'open').length : null;
-  app.innerHTML = `<header><b>${tr('tab.' + S.tab)}${S.tab === 'pos' && n != null ? ` (${n})` : ''}</b><button id="ref" class="upd">${S.loading ? `<span class="spin"></span> ${tr('upd.loading')}` : S.at ? `${tr('upd.at', { t: ago(S.at) })} ↻` : '↻'}</button></header>
+  app.innerHTML = `<header><b>${S.tab === 'pos' ? 'Radar Mobile' : tr('tab.' + S.tab)}</b><button id="ref" class="upd">${updTxt()}</button></header>
     ${S.err ? `<div class="err">${esc(tr(S.err))}</div>` : ''}
     <main id="main">${body}</main>
     <nav>${['pos', 'ord', 'hist', 'cfg'].map((k) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${tr('tab.' + k)}</button>`).join('')}</nav>`;
@@ -186,18 +188,20 @@ function posView() {
     const p = market[coin(t)]?.mark ?? null;
     const L = ladder(t, rate);
     const roe = t.margin ? t.upnl / t.margin : null;
-    return { t, p, L, pl: t.upnl, roe, val: t.value || (p ? t.qty * p : 0), liqD: t.liq && p ? Math.abs(t.liq - p) / p : Infinity };
+    const nx = L.pend[0] || null;
+    return { t, p, L, pl: t.upnl, roe, val: t.value || (p ? t.qty * p : 0), liqD: t.liq && p ? Math.abs(t.liq - p) / p : Infinity,
+      slD: t.sl && p ? Math.abs(p - t.sl) / p : Infinity, tpD: nx && p ? Math.abs(nx.px - p) / p : Infinity, tpN: nx && L.levels.length > 1 ? nx.n : null };
   });
   let tPl = 0, tSl = 0, tTp = 0, nSl = 0, nTp = 0;
   for (const r of rows) { tPl += r.pl || 0; if (r.L.ifSl != null) { tSl += r.L.ifSl - r.L.realized; nSl++; } if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0); nTp++; } }
   const k = S.sort.k, d = S.sort.d;
-  const key = { pnl: (r) => r.pl || 0, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
-  rows.sort((a, b) => { const x = key(a), y = key(b); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d; });
+  const key = { nsl: (r) => r.slD, ntp: (r) => r.tpD, pnl: (r) => r.pl || 0, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
+  rows.sort((a, b) => { const x = key(a), y = key(b); if (x === Infinity || y === Infinity) return (x === Infinity) - (y === Infinity); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d; });
   const chip = (kk, l) => `<button class="chip${k === kk ? ' on' : ''}" data-sort="${kk}">${l}${k === kk ? (d > 0 ? ' ▲' : ' ▼') : ''}</button>`;
-  return `<section class="tiles"><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
+  return `<section class="tiles"><div class="tile"><span>${tr('tab.pos')}</span><b>${rows.length}</b></div><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
     ${marginBar(account)}
     <div class="tot">${nSl ? `${tr('allSl')} <b class="neg">${num(tSl)}</b>` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
-    <div class="sorts">${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div>
+    <div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div>
     ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}
     ${finView()}`;
 }
@@ -211,12 +215,15 @@ function marginBar(a) {
   return `<div class="mg"><div class="mgt"><span>${tr('mg.used')} <b>${usd(used, false)}</b> <em class="${lvl}">${Math.round(f * 100)}%</em></span><span>${tr('mg.free')} <b>${usd(free, false)}</b></span></div>
     <div class="mgb">${seg(0, 0.7, '')}${seg(0.7, 0.9, 'mid')}${seg(0.9, 1, 'hi')}<i style="left:70%"></i><i style="left:90%"></i></div></div>`;
 }
-function card({ t, p, L, pl, roe, liqD }) {
+function card({ t, p, L, pl, roe, liqD, slD, tpD, tpN }) {
+  const pc = (v) => fmt1(v * 100) + '%', hk = S.sort.k;
+  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : ''}">${isFinite(slD) ? tr('distSl', { p: pc(slD) }) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${isFinite(tpD) ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpD) }) : tr('noTp')}</span></div>`;
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
   const partial = t.parts?.length;
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
     <div class="h"><b>${esc(coin(t))}</b><span>${t.lev ? fmt1(t.lev) + 'x · ' : ''}${sideTxt(t)}</span><span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><small>${tr('now')}</small><b>${usd(pl)}</b> <em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
     ${bar(t, p, pl, roe, L)}
+    ${dist}
     <div class="f"><span>${tr('mark')} <b class="wht">${p ? fmtPrice(p) : '—'}</b></span><span>${tr('liq')} <b>${t.liq ? fmtPrice(t.liq) : '—'}</b>${isFinite(liqD) ? ` <small class="${liqD < 0.1 ? 'warn' : ''}">${tr('away', { p: (liqD > 1 ? '> 100' : fmt1(liqD * 100)) + '%' })}</small>` : ''}</span><span>${tr('margin')} <b>${t.margin ? usd(t.margin, false) : '—'}</b></span></div>
     <div class="f"><span>${tr('size')} <b>${qty(t.qty)} ${esc(coin(t))}</b>${partial ? ` <small>${tr('of', { q: qty(origQty(t)) })}</small>` : ''}</span></div>
     ${op ? detail(t, p, L) : ''}</article>`;
@@ -309,7 +316,7 @@ function bind() {
   document.querySelectorAll('nav [data-tab]').forEach((b) => (b.onclick = () => { S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); }));
   document.querySelectorAll('[data-sort]').forEach((b) => (b.onclick = () => {
     const k = b.dataset.sort;
-    S.sort = S.sort.k === k ? { k, d: -S.sort.d } : { k, d: k === 'mkt' || k === 'liq' ? 1 : k === 'pnl' ? 1 : -1 };
+    S.sort = S.sort.k === k ? { k, d: -S.sort.d } : { k, d: ['mkt', 'liq', 'pnl', 'nsl', 'ntp'].includes(k) ? 1 : -1 };
     ls.set('sort', S.sort); render();
   }));
   document.querySelectorAll('[data-days]').forEach((b) => (b.onclick = () => { S.histDays = +b.dataset.days; render(); }));
