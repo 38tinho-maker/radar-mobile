@@ -4,8 +4,9 @@ import { hlState, hlOpenOrders, hlFills, hlFunding, hlFees, hlMarket, isAddress 
 import { slimFill, slimFund, slimOrder, buildTrades } from './lib/hltrades.js';
 import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice } from './lib/format.js';
+import { extStore, bestWorst } from './lib/runext.js';
 
-const VERSION = '1.0.5';
+const VERSION = '1.0.6';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -44,24 +45,34 @@ async function load() {
       account: { value: +state.marginSummary.accountValue, margin: +state.marginSummary.totalMarginUsed, free: +state.withdrawable },
     };
     S.err = null; S.at = Date.now();
+    // máxima e mínima desde a entrada (candles da Hyperliquid), em segundo plano
+    EXT.refresh(trades.filter((t) => t.status === 'open' && t.openedAt).map((t) => ({ id: t.id, coin: coin(t), since: t.openedAt })), () => { if (S.tab === 'pos') render(); });
   } catch (e) {
     S.err = e?.code === 'invalid' ? 'Endereço não encontrado na Hyperliquid.' : 'Sem conexão com a Hyperliquid. Tentando de novo…';
   } finally { S.loading = false; render(); }
 }
+const EXT = extStore({ load: async () => ls.get('ext', {}), save: async (m) => ls.set('ext', m) });
+EXT.init();
 const withMeta = (t) => { const m = S.meta[t.id] || {}; return { ...t, patternName: m.patternName || null, tf: m.tf || null, linkSrc: m.patternName ? (m.auto ? m.src : m.src || 'manual') : null }; };
 
 // ---------- barra TP/SL (igual à Carteira) ----------
 // largura real da barra: tela − margens da página (12+12) − recuo do card (12+12) − bordas (3+1)
 const W = () => Math.max(220, Math.min(560, (document.documentElement.clientWidth || window.innerWidth) - 56));
 function inTxt(v, frac) { if (v == null || !isFinite(v)) return ''; const t = num(v); return t.length * 6.2 + 8 <= frac * W() ? t : ''; }
-function tag(pos, pl, roe) {
+// seta no preço de agora, na cor do resultado (o valor fica no título do card)
+function arrow(pos, pl) {
   if (pos == null) return '';
-  const w = W(), pc = Math.max(0, Math.min(1, pos));
-  if (pl == null || !isFinite(pl)) return `<i class="mk" style="left:${(pc * 100).toFixed(1)}%"></i>`;
-  const a = usd(pl), b = roe != null && isFinite(roe) ? pct(roe) : '';
-  const lw = (a.length + b.length) * 6 + (b ? 22 : 12);
-  const x = pc * w, left = Math.max(0, Math.min(w - lw, x - lw / 2));
-  return `<div class="ptag ${pl >= 0 ? 'up' : 'dn'}" style="left:${left.toFixed(0)}px"><span class="pv">${a}</span>${b ? `<span class="pr">${b}</span>` : ''}<i style="left:${(x - left).toFixed(0)}px"></i></div>`;
+  return `<i class="mk ${pl == null ? '' : pl >= 0 ? 'up' : 'dn'}" style="left:${(Math.max(0, Math.min(1, pos)) * 100).toFixed(1)}%"></i>`;
+}
+// trecho percorrido: forte = entrada → agora; claro com brilho = até o melhor e o pior ponto desde a entrada.
+// Os preenchimentos passam por baixo dos segmentos (o TP executado fica na cor cheia); por cima, só o contorno.
+function traveled(ent, pos, run) {
+  const box = (a, b, c) => { const x = Math.max(0, Math.min(a, b)), y = Math.min(1, Math.max(a, b)); return y - x < 0.002 ? '' : `<div class="${c}" style="left:${(x * 100).toFixed(2)}%;width:${((y - x) * 100).toFixed(2)}%"></div>`; };
+  let out = '';
+  if (run?.fav != null) out += box(ent, run.fav, 'ext up') + box(ent, run.fav, 'glow up');
+  if (run?.adv != null) out += box(run.adv, ent, 'ext dn') + box(run.adv, ent, 'glow dn');
+  if (pos != null) out += box(ent, pos, `trav ${pos >= ent ? 'up' : 'dn'}`);
+  return out;
 }
 function labels(t, sl, ent, right, sub) {
   const cw = 6.4, w = W(), sT = fmtPrice(sl), eT = fmtPrice(t.entry);
@@ -72,7 +83,7 @@ function labels(t, sl, ent, right, sub) {
 function bar(t, p, pl, roe, L) {
   const sl = t.sl, s = t.dir === 'baixa' ? -1 : 1;
   if (sl == null || !L.levels.length) {
-    return `<div class="tpn">${pl != null ? `<span class="ptag st ${pl >= 0 ? 'up' : 'dn'}"><span class="pv">${usd(pl)}</span>${roe != null ? `<span class="pr">${pct(roe)}</span>` : ''}</span>` : ''}<span class="muted">entrada</span> <b class="mono">${fmtPrice(t.entry)}</b> ${sl == null ? '<span class="nosl">sem SL</span>' : `<span class="neg mono">SL ${fmtPrice(sl)}</span> <span class="muted">sem TP</span>`}</div>`;
+    return `<div class="tpn"><span class="muted">entrada</span> <b class="mono">${fmtPrice(t.entry)}</b> ${sl == null ? '<span class="nosl">sem SL</span>' : `<span class="neg mono">SL ${fmtPrice(sl)}</span> <span class="muted">sem TP</span>`}</div>`;
   }
   const w = W();
   const RED = Math.max(0.22, Math.min(0.42, (fmtPrice(sl).length * 6.4 + 8) / w));
@@ -94,13 +105,13 @@ function bar(t, p, pl, roe, L) {
     return Math.min(x, 1);
   };
   const pos = p ? posAt(p) : null;
-  // trecho percorrido (entrada → preço) e Máx/Mín desde a entrada
-  const trav = pos != null && Math.abs(pos - RED) > 0.002 ? `<div class="trav ${pos >= RED ? 'up' : 'dn'}" style="left:${(Math.min(RED, pos) * 100).toFixed(2)}%;width:${(Math.abs(pos - RED) * 100).toFixed(2)}%"></div>` : '';
+  const bw = bestWorst(EXT.get(t.id), t, p);
+  const trav = traveled(RED, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null });
 
   const slV = L.ifSl != null ? L.ifSl - L.realized : null;
   const html = segs.map((g) => { const fr = (1 - RED) * g.w / tot; const tx = g.unc ? (fr * w > 44 ? 'sem TP' : '') : inTxt(g.net, fr - (g.done ? 0.04 : 0)); return `<div class="pg${g.done ? ' dn' : ''}${g.unc ? ' un' : ''}" style="flex:${(g.w / tot).toFixed(4)}">${g.done && tx ? '✓' : ''}${tx}</div>`; }).join('');
   const nD = L.done.length, nA = L.levels.length, last = L.pend.length ? L.pend[L.pend.length - 1].px : L.levels[nA - 1].px;
-  return `<div class="tpb"><div class="trk">${trav}<div class="rk" style="width:${RED * 100}%">${inTxt(slV, RED)}</div><div class="pgs">${html}</div><i class="en" style="left:${RED * 100}%"></i>${tag(pos, pl, roe)}</div>
+  return `<div class="tpb"><div class="trk">${trav}<div class="rk" style="width:${RED * 100}%">${inTxt(slV, RED)}</div><div class="pgs">${html}</div><i class="en" style="left:${RED * 100}%"></i>${arrow(pos, pl)}</div>
     ${labels(t, sl, RED, fmtPrice(last), nA > 1 ? (nD ? `${nD} de ${nA} TPs` : `${nA} TPs`) : '')}</div>`;
 }
 
@@ -171,9 +182,10 @@ function card({ t, p, L, pl, roe, liqD }) {
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
   const partial = t.parts?.length;
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
-    <div class="h"><b>${esc(coin(t))}</b><span>${t.lev ? String(t.lev).replace('.', ',') + 'x · ' : ''}${t.dir === 'baixa' ? 'venda' : 'compra'}</span><span class="grow"></span><span class="q">${qty(t.qty)} ${esc(coin(t))}${partial ? ` <small>de ${qty(origQty(t))}</small>` : ''}</span></div>
+    <div class="h"><b>${esc(coin(t))}</b><span>${t.lev ? String(t.lev).replace('.', ',') + 'x · ' : ''}${t.dir === 'baixa' ? 'venda' : 'compra'}</span><span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><small>RESULTADO AGORA</small><b>${usd(pl)}</b> <em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
     ${bar(t, p, pl, roe, L)}
     <div class="f"><span>Marca <b class="wht">${p ? fmtPrice(p) : '—'}</b></span><span>Liq. <b>${t.liq ? fmtPrice(t.liq) : '—'}</b>${isFinite(liqD) ? ` <small class="${liqD < 0.1 ? 'warn' : ''}">a ${liqD > 1 ? '> 100' : (liqD * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%</small>` : ''}</span><span>Margem <b>${t.margin ? usd(t.margin, false) : '—'}</b></span></div>
+    <div class="f"><span>Tamanho <b>${qty(t.qty)} ${esc(coin(t))}</b>${partial ? ` <small>de ${qty(origQty(t))}</small>` : ''}</span></div>
     ${op ? detail(t, p, L) : ''}</article>`;
 }
 function detail(t, p, L) {

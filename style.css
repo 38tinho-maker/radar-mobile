@@ -107,3 +107,18 @@ article .f small { color: var(--mut); } article .f small.warn { color: var(--org
 .xm.up { border-color: var(--teal); color: var(--teal); } .xm.dn { border-color: var(--red); color: var(--red); }
 .xm span { position: absolute; top: 23px; left: 0; transform: translateX(-50%); font: 600 9.5px var(--sans); white-space: nowrap; }
 .lb.ext { margin-top: 14px; }
+
+/* v1.0.6: resultado agora no título + máx/mín desde a entrada acendendo a barra */
+article .h { align-items: flex-end; }
+article .h .now { text-align: right; line-height: 1.15; white-space: nowrap; }
+article .h .now small { display: block; font: 600 9.5px var(--sans); letter-spacing: .3px; color: var(--mut); }
+article .h .now b { font: 600 15px var(--mono); } article .h .now em { font: 12px var(--mono); font-style: normal; opacity: .85; }
+article .h .now.pos b, article .h .now.pos em { color: var(--teal); } article .h .now.neg b, article .h .now.neg em { color: var(--red); }
+.tpb { padding-top: 10px; }
+.mk { z-index: 3; } .mk.up { border-top-color: var(--teal); } .mk.dn { border-top-color: var(--red); }
+.ext { position: absolute; top: 0; height: 18px; z-index: 0; pointer-events: none; }
+.ext.up { background: rgba(80,210,193,.2); } .ext.dn { background: rgba(237,112,136,.25); }
+.glow { position: absolute; top: 0; height: 18px; z-index: 2; pointer-events: none; border-radius: 2px; }
+.glow.up { box-shadow: 0 0 8px rgba(80,210,193,.55), inset 0 0 0 1px rgba(80,210,193,.6); }
+.glow.dn { box-shadow: 0 0 8px rgba(237,112,136,.55), inset 0 0 0 1px rgba(237,112,136,.6); }
+.trk { overflow: visible; }
