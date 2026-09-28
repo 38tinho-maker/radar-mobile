@@ -122,3 +122,9 @@ article .h .now.pos b, article .h .now.pos em { color: var(--teal); } article .h
 .glow.up { box-shadow: 0 0 8px rgba(80,210,193,.55), inset 0 0 0 1px rgba(80,210,193,.6); }
 .glow.dn { box-shadow: 0 0 8px rgba(237,112,136,.55), inset 0 0 0 1px rgba(237,112,136,.6); }
 .trk { overflow: visible; }
+
+/* v1.0.7: idioma */
+.lang { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; align-self: flex-start; }
+.lang button { border: 0; background: none; color: var(--head); padding: 6px 12px; border-radius: 6px; font-size: 13px; }
+.lang button.on { background: #1c2b30; color: var(--txt); font-weight: 600; }
+.cfg .box .lang { margin: 2px 0; }
