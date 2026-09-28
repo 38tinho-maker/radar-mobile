@@ -7,7 +7,7 @@ import { fmtPrice, setPriceLocale } from './lib/format.js';
 import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/i18n.js';
 import { extStore, bestWorst } from './lib/runext.js';
 
-const VERSION = '1.0.7';
+const VERSION = '1.0.8';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -115,9 +115,11 @@ function bar(t, p, pl, roe, L) {
   const trav = traveled(RED, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null });
 
   const slV = L.ifSl != null ? L.ifSl - L.realized : null;
-  const html = segs.map((g) => { const fr = (1 - RED) * g.w / tot; const tx = g.unc ? (fr * w > 44 ? tr('noTp') : '') : inTxt(g.net, fr - (g.done ? 0.04 : 0)); return `<div class="pg${g.done ? ' dn' : ''}${g.unc ? ' un' : ''}" style="flex:${(g.w / tot).toFixed(4)}">${g.done && tx ? '✓' : ''}${tx}</div>`; }).join('');
+  const html = segs.map((g) => `<div class="pg${g.done ? ' dn' : ''}${g.unc ? ' un' : ''}" style="flex:${(g.w / tot).toFixed(4)}"></div>`).join('');
+  // valores numa camada própria, por cima do brilho (sempre legíveis)
+  const txs = segs.map((g) => { const fr = (1 - RED) * g.w / tot; const tx = g.unc ? (fr * w > 44 ? tr('noTp') : '') : inTxt(g.net, fr - (g.done ? 0.04 : 0)); return `<span class="${g.done ? 't-dn' : g.unc ? 't-un' : 't-gn'}" style="flex:${(g.w / tot).toFixed(4)}">${g.done && tx ? '✓' : ''}${tx}</span>`; }).join('');
   const nD = L.done.length, nA = L.levels.length, last = L.pend.length ? L.pend[L.pend.length - 1].px : L.levels[nA - 1].px;
-  return `<div class="tpb"><div class="trk">${trav}<div class="rk" style="width:${RED * 100}%">${inTxt(slV, RED)}</div><div class="pgs">${html}</div><i class="en" style="left:${RED * 100}%"></i>${arrow(pos, pl)}</div>
+  return `<div class="tpb"><div class="trk">${trav}<div class="rk" style="width:${RED * 100}%"></div><div class="pgs">${html}</div><div class="txl"><span class="t-rk" style="width:${RED * 100}%">${inTxt(slV, RED)}</span><div class="txg">${txs}</div></div><i class="en" style="left:${RED * 100}%"></i>${arrow(pos, pl)}</div>
     ${labels(t, sl, RED, fmtPrice(last), nA > 1 ? (nD ? tr('tpsOf', { d: nD, a: nA }) : tr('tps', { a: nA })) : '')}</div>`;
 }
 
