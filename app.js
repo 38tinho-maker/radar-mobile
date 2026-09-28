@@ -5,7 +5,7 @@ import { slimFill, slimFund, slimOrder, buildTrades } from './lib/hltrades.js';
 import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice } from './lib/format.js';
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -161,8 +161,10 @@ function marginBar(a) {
   if (!a?.value) return '';
   const used = a.margin || 0, f = Math.max(0, Math.min(1, used / a.value)), free = Math.max(0, a.value - used);
   const lvl = f > 0.9 ? 'hi' : f > 0.7 ? 'mid' : '';
+  // faixas como no mockup: verde até 70%, laranja de 70 a 90%, vermelho acima de 90%
+  const seg = (a0, a1, c) => (f > a0 ? `<div class="${c}" style="left:${a0 * 100}%;width:${(Math.min(f, a1) - a0) * 100}%"></div>` : '');
   return `<div class="mg"><div class="mgt"><span>Margem usada <b>${usd(used, false)}</b> <em class="${lvl}">${Math.round(f * 100)}%</em></span><span>livre <b>${usd(free, false)}</b></span></div>
-    <div class="mgb"><div class="${lvl}" style="width:${(f * 100).toFixed(1)}%"></div></div></div>`;
+    <div class="mgb">${seg(0, 0.7, '')}${seg(0.7, 0.9, 'mid')}${seg(0.9, 1, 'hi')}<i style="left:70%"></i><i style="left:90%"></i></div></div>`;
 }
 function card({ t, p, L, pl, roe, liqD }) {
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
