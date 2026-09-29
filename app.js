@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.12';
+const VERSION = '1.0.13';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -180,6 +180,15 @@ function bindLang() {
   }));
 }
 
+// quanto do caminho até o SL o preço já andou.
+// SL do lado do prejuízo: da entrada até o SL. SL travando lucro: do melhor preço desde a entrada até o SL (folga devolvida).
+function slProg(t, p) {
+  if (!t.sl || !p) return null;
+  const s = t.dir === 'baixa' ? -1 : 1;
+  let ref = t.entry;
+  if (s * (t.sl - t.entry) >= 0) { const bw = bestWorst(EXT.get(t.id), t, p); ref = bw?.best != null && s * (bw.best - p) > 0 ? bw.best : p; }
+  return t.sl !== ref ? (p - ref) / (t.sl - ref) : null;
+}
 function posView() {
   if (!S.data) return `<div class="empty">${tr(S.loading ? 'loadingPos' : 'noData')}</div>`;
   const { market, account, rate } = S.data;
@@ -191,7 +200,7 @@ function posView() {
     const nx = L.pend[0] || null;
     return { t, p, L, pl: t.upnl, roe, val: t.value || (p ? t.qty * p : 0), liqD: t.liq && p ? Math.abs(t.liq - p) / p : Infinity,
       // quanto do caminho entrada → SL (ou → próximo TP) o preço já percorreu (0 = na entrada, 1 = chegou)
-      slP: t.sl && p && t.sl !== t.entry ? (p - t.entry) / (t.sl - t.entry) : null, tpP: nx && p && nx.px !== t.entry ? (p - t.entry) / (nx.px - t.entry) : null, tpN: nx && L.levels.length > 1 ? nx.n : null };
+      slP: slProg(t, p), tpP: nx && p && nx.px !== t.entry ? (p - t.entry) / (nx.px - t.entry) : null, tpN: nx && L.levels.length > 1 ? nx.n : null };
   });
   let tPl = 0, tSl = 0, tTp = 0, nSl = 0, nTp = 0;
   for (const r of rows) { tPl += r.pl || 0; if (r.L.ifSl != null) { tSl += r.L.ifSl - r.L.realized; nSl++; } if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0); nTp++; } }
