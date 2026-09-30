@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.15';
+const VERSION = '1.0.16';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -215,13 +215,13 @@ function posView() {
   let tPl = 0, tSl = 0, tTp = 0, nSl = 0, nTp = 0;
   for (const r of rows) { tPl += r.pl || 0; if (r.L.ifSl != null) { tSl += r.L.ifSl - r.L.realized; nSl++; } if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0); nTp++; } }
   const k = S.sort.k, d = S.sort.d;
-  const key = { nsl: (r) => (r.slP == null ? Infinity : -r.slP), ntp: (r) => (r.tpP == null ? Infinity : -r.tpP), pnl: (r) => r.pl || 0, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
+  const key = { nsl: (r) => (r.slP == null ? Infinity : -r.slP), ntp: (r) => (r.tpP == null ? Infinity : -r.tpP), rr: (r) => (r.L.rr == null ? Infinity : r.L.rr === Infinity ? 1e9 : r.L.rr), pnl: (r) => r.pl || 0, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
   rows.sort((a, b) => { const x = key(a), y = key(b); if (x === Infinity || y === Infinity) return (x === Infinity) - (y === Infinity); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d; });
   const chip = (kk, l) => `<button class="chip${k === kk ? ' on' : ''}" data-sort="${kk}">${l}${k === kk ? (d > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   return `<section class="tiles"><div class="tile"><span>${tr('tab.pos')}</span><b>${rows.length}</b></div><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
     ${marginBar(account)}
     <div class="tot">${nSl ? `${tr('allSl')} <b class="neg">${num(tSl)}</b>` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
-    <div class="sortw"><div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div></div>
+    <div class="sortw"><div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('rr', 'R/R')}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div></div>
     ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}
     ${finView()}`;
 }
@@ -242,6 +242,7 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   // no lucro (0% do caminho) mostra também a distância do preço, para o desempate ficar visível
   const dd = (v, d) => (v <= 0 && d != null ? ` <small>· ${tr('away', { p: fmt1(d * 100) + '%' })}</small>` : '');
   const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : 'neg'}">${slP != null ? tr('distSl', { p: pc(slP) }) + dd(slP, slD) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) + dd(tpP, tpD) : tr('noTp')}</span></div>`;
+  const rrv = L.rr == null ? '' : `<div class="dst rrl"><span></span><span class="${hk === 'rr' ? 'on' : ''}">R/R <b>${L.rr === Infinity ? tr('noRisk') : fmt1(L.rr)}</b></span></div>`;
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
   const partial = t.parts?.length;
   const liqTx = !t.liq ? '—' : liqD > 1 ? tr('far') : fmtPrice(t.liq);
@@ -249,7 +250,7 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
     <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
     ${bar(t, p, pl, roe, L)}
-    ${dist}
+    ${dist}${rrv}
     <div class="fg">${cell(tr('mark'), p ? fmtPrice(p) : '—', 'wht')}${cell(tr('liq'), liqTx, isFinite(liqD) && liqD < 0.1 ? 'warn' : '')}${cell(tr('margin'), t.margin ? usd(t.margin, false) : '—')}${cell(tr('size'), `${qty(t.qty)}${partial ? `<small>/${qty(origQty(t))}</small>` : ''}`)}</div>
     ${op ? detail(t, p, L) : ''}</article>`;
 }

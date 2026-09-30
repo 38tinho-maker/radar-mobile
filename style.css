@@ -218,3 +218,5 @@ html[data-theme=light] .spin { border-color: #c8d0d4; border-top-color: var(--te
 .trk .mk { top: -4px; width: 3px; height: 26px; margin-left: -1.5px; border: 0; border-radius: 2px; background: var(--wht); box-shadow: 0 0 0 1px var(--bg); z-index: 5; }
 .trk .xl { top: -7px; height: 0; width: 0; margin-left: -4px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid; opacity: 1; z-index: 4; }
 .trk .xl.up { border-top-color: var(--teal); border-left-color: transparent; } .trk .xl.dn { border-top-color: var(--red); border-left-color: transparent; }
+
+.dst.rrl { margin-top: -6px; } .dst.rrl b { font-family: var(--mono); color: var(--txt); }
