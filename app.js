@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.13';
+const VERSION = '1.0.14';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -19,6 +19,14 @@ const ls = {
 // idioma: o salvo, ou o do celular na primeira vez
 function applyLang(l) { setLang(l); setPriceLocale(loc()); }
 applyLang(ls.get('lang') || defaultLang());
+// tema: escuro, claro ou auto (segue o iPhone)
+function applyTheme(m) {
+  const light = m === 'light' || (m === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', light ? '#f3f5f6' : '#0b1216');
+}
+applyTheme(ls.get('theme') || 'dark');
+matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme(ls.get('theme') || 'dark'));
 const S = { fin: ls.get('fin') || (() => { const f = { since: Date.now() - 86400e3, hidden: [] }; ls.set('fin', f); return f; })(), addr: ls.get('addr'), meta: ls.get('meta', {}), metaAt: ls.get('metaAt'), tab: 'pos', sort: ls.get('sort', { k: 'pnl', d: 1 }), open: new Set(), data: null, err: null, loading: false, at: 0, histDays: 30 };
 
 // ---------- formatos ----------
@@ -89,9 +97,11 @@ function arrow(pos, pl) {
 function traveled(ent, pos, run) {
   const box = (a, b, c) => { const x = Math.max(0, Math.min(a, b)), y = Math.min(1, Math.max(a, b)); return y - x < 0.002 ? '' : `<div class="${c}" style="left:${(x * 100).toFixed(2)}%;width:${((y - x) * 100).toFixed(2)}%"></div>`; };
   let out = '';
-  if (run?.fav != null) out += box(ent, run.fav, 'ext up') + box(ent, run.fav, 'glow up');
-  if (run?.adv != null) out += box(run.adv, ent, 'ext dn') + box(run.adv, ent, 'glow dn');
   if (pos != null) out += box(ent, pos, `trav ${pos >= ent ? 'up' : 'dn'}`);
+  // melhor e pior preço desde a entrada: linha pontilhada fina
+  const ln = (x, c) => `<i class="xl ${c}" style="left:${(Math.max(0, Math.min(1, x)) * 100).toFixed(2)}%"></i>`;
+  if (run?.fav != null && Math.abs(run.fav - ent) > 0.004) out += ln(run.fav, 'up');
+  if (run?.adv != null && Math.abs(run.adv - ent) > 0.004) out += ln(run.adv, 'dn');
   return out;
 }
 function labels(t, sl, ent, right, sub) {
@@ -200,7 +210,7 @@ function posView() {
     const nx = L.pend[0] || null;
     return { t, p, L, pl: t.upnl, roe, val: t.value || (p ? t.qty * p : 0), liqD: t.liq && p ? Math.abs(t.liq - p) / p : Infinity,
       // quanto do caminho entrada → SL (ou → próximo TP) o preço já percorreu (0 = na entrada, 1 = chegou)
-      slP: slProg(t, p), tpP: nx && p && nx.px !== t.entry ? (p - t.entry) / (nx.px - t.entry) : null, tpN: nx && L.levels.length > 1 ? nx.n : null };
+      slP: slProg(t, p), slD: t.sl && p ? Math.abs(p - t.sl) / p : null, tpD: nx && p ? Math.abs(nx.px - p) / p : null, tpP: nx && p && nx.px !== t.entry ? (p - t.entry) / (nx.px - t.entry) : null, tpN: nx && L.levels.length > 1 ? nx.n : null };
   });
   let tPl = 0, tSl = 0, tTp = 0, nSl = 0, nTp = 0;
   for (const r of rows) { tPl += r.pl || 0; if (r.L.ifSl != null) { tSl += r.L.ifSl - r.L.realized; nSl++; } if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0); nTp++; } }
@@ -211,7 +221,7 @@ function posView() {
   return `<section class="tiles"><div class="tile"><span>${tr('tab.pos')}</span><b>${rows.length}</b></div><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
     ${marginBar(account)}
     <div class="tot">${nSl ? `${tr('allSl')} <b class="neg">${num(tSl)}</b>` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
-    <div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div>
+    <div class="sortw"><div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div></div>
     ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}
     ${finView()}`;
 }
@@ -223,19 +233,24 @@ function marginBar(a) {
   // faixas como no mockup: verde até 70%, laranja de 70 a 90%, vermelho acima de 90%
   const seg = (a0, a1, c) => (f > a0 ? `<div class="${c}" style="left:${a0 * 100}%;width:${(Math.min(f, a1) - a0) * 100}%"></div>` : '');
   return `<div class="mg"><div class="mgt"><span>${tr('mg.used')} <b>${usd(used, false)}</b> <em class="${lvl}">${Math.round(f * 100)}%</em></span><span>${tr('mg.free')} <b>${usd(free, false)}</b></span></div>
-    <div class="mgb">${seg(0, 0.7, '')}${seg(0.7, 0.9, 'mid')}${seg(0.9, 1, 'hi')}<i style="left:70%"></i><i style="left:90%"></i></div></div>`;
+    <div class="mgb">${seg(0, 0.7, '')}${seg(0.7, 0.9, 'mid')}${seg(0.9, 1, 'hi')}<i style="left:70%"></i><i style="left:90%"></i></div>
+    ${f > 0.9 ? `<div class="mgw">⚠ ${tr('mg.full', { p: Math.round(f * 100) + '%' })}</div>` : ''}</div>`;
 }
-function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN }) {
-  const pc = (v) => (v > 1 ? '> 100' : String(Math.round(Math.max(0, v) * 100))) + '%', hk = S.sort.k;
-  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : ''}">${slP != null ? tr('distSl', { p: pc(slP) }) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) : tr('noTp')}</span></div>`;
+function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
+  const hk = S.sort.k;
+  const pc = (v) => (v > 1 ? '> 100' : String(Math.round(Math.max(0, v) * 100))) + '%';
+  // no lucro (0% do caminho) mostra também a distância do preço, para o desempate ficar visível
+  const dd = (v, d) => (v <= 0 && d != null ? ` <small>· ${tr('away', { p: fmt1(d * 100) + '%' })}</small>` : '');
+  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : 'neg'}">${slP != null ? tr('distSl', { p: pc(slP) }) + dd(slP, slD) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) + dd(tpP, tpD) : tr('noTp')}</span></div>`;
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
   const partial = t.parts?.length;
+  const liqTx = !t.liq ? '—' : liqD > 1 ? tr('far') : fmtPrice(t.liq);
+  const cell = (k, v, c = '') => `<div><span>${k}</span><b class="${c}">${v}</b></div>`;
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
-    <div class="h"><b>${esc(coin(t))}</b><span>${t.lev ? fmt1(t.lev) + 'x · ' : ''}${sideTxt(t)}</span><span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><small>${tr('now')}</small><b>${usd(pl)}</b> <em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
+    <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
     ${bar(t, p, pl, roe, L)}
     ${dist}
-    <div class="f"><span>${tr('mark')} <b class="wht">${p ? fmtPrice(p) : '—'}</b></span><span>${tr('liq')} <b>${t.liq ? fmtPrice(t.liq) : '—'}</b>${isFinite(liqD) ? ` <small class="${liqD < 0.1 ? 'warn' : ''}">${tr('away', { p: (liqD > 1 ? '> 100' : fmt1(liqD * 100)) + '%' })}</small>` : ''}</span><span>${tr('margin')} <b>${t.margin ? usd(t.margin, false) : '—'}</b></span></div>
-    <div class="f"><span>${tr('size')} <b>${qty(t.qty)} ${esc(coin(t))}</b>${partial ? ` <small>${tr('of', { q: qty(origQty(t)) })}</small>` : ''}</span></div>
+    <div class="fg">${cell(tr('mark'), p ? fmtPrice(p) : '—', 'wht')}${cell(tr('liq'), liqTx, isFinite(liqD) && liqD < 0.1 ? 'warn' : '')}${cell(tr('margin'), t.margin ? usd(t.margin, false) : '—')}${cell(tr('size'), `${qty(t.qty)}${partial ? `<small>/${qty(origQty(t))}</small>` : ''}`)}</div>
     ${op ? detail(t, p, L) : ''}</article>`;
 }
 // ---------- Finalizados: ficam até você dispensar ----------
@@ -311,6 +326,7 @@ function histView() {
 function cfgView() {
   const nMeta = Object.keys(S.meta || {}).length;
   return `<section class="cfg">
+    <div class="box"><span>${tr('cfg.theme')}</span><div class="lang">${[['dark', '🌙 ' + tr('th.dark')], ['light', '☀️ ' + tr('th.light')], ['auto', '⚙️ Auto']].map(([k, l]) => `<button type="button" data-theme="${k}" class="${(ls.get('theme') || 'dark') === k ? 'on' : ''}">${l}</button>`).join('')}</div><small>${tr('cfg.themeSub')}</small></div>
     <div class="box"><span>${tr('cfg.lang')}</span>${langSeg()}<small>${tr('cfg.langSub')}</small></div>
     <div class="box"><span>${tr('cfg.wallet')}</span><b class="mono">${esc(S.addr.slice(0, 6))}…${esc(S.addr.slice(-4))}</b><small>${tr('cfg.walletSub')}</small><button id="out" class="ghost">${tr('cfg.change')}</button></div>
     <div class="box"><span>${tr('cfg.linked')}</span><b>${nMeta ? (nMeta === 1 ? '1 trade' : tr('cfg.nTrades', { n: nMeta })) : tr('cfg.none')}</b><small>${S.metaAt ? tr('cfg.backupOf', { d: dt(S.metaAt) }) : tr('cfg.impHint')}</small>
@@ -323,10 +339,11 @@ function cfgView() {
 function bind() {
   $('#ref').onclick = () => load();
   bindLang();
+  document.querySelectorAll('button[data-theme]').forEach((b) => (b.onclick = () => { ls.set('theme', b.dataset.theme); applyTheme(b.dataset.theme); render(); }));
   document.querySelectorAll('nav [data-tab]').forEach((b) => (b.onclick = () => { S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); }));
   document.querySelectorAll('[data-sort]').forEach((b) => (b.onclick = () => {
     const k = b.dataset.sort;
-    S.sort = S.sort.k === k ? { k, d: -S.sort.d } : { k, d: ['mkt', 'liq', 'pnl', 'nsl', 'ntp'].includes(k) ? 1 : -1 };
+    S.sort = S.sort.k === k ? { k, d: -S.sort.d } : { k, d: ['mkt', 'liq', 'nsl', 'ntp'].includes(k) ? 1 : -1 };
     ls.set('sort', S.sort); render();
   }));
   document.querySelectorAll('[data-days]').forEach((b) => (b.onclick = () => { S.histDays = +b.dataset.days; render(); }));

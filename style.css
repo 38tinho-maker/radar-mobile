@@ -161,3 +161,54 @@ article.fc .h.sh > b:first-child, article.fc .h.sh > span:nth-child(2) { color: 
 .tile b { white-space: nowrap; }
 .dst { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--head); margin-top: -2px; }
 .dst .on { font-weight: 700; }
+
+/* ===== v1.0.14 ===== */
+/* card: selo SHORT/LONG, moeda neutra, PNL empilhado sem rótulo */
+article.pc .h { align-items: center; }
+article.pc .h > b.coin { color: var(--txt); font-size: 15.5px; }
+article.pc .h > span.sd.sd { font: 700 10px/16px var(--sans); letter-spacing: .4px; padding: 0 7px; border-radius: 8px; color: var(--pan); }
+article.pc .h > span.sd.sh { background: var(--red); } article.pc .h > span.sd.lg { background: var(--teal); }
+article.pc .h .lev { color: var(--head); font-size: 12px; }
+article.pc .h .now { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.12; }
+article.pc .h .now b { font: 600 15.5px var(--mono); } article.pc .h .now em { font: 11.5px var(--mono); font-style: normal; opacity: .85; }
+.dst small { font-weight: 400; color: var(--mut); font-size: 11px; }
+.dst .neg { color: var(--red); }
+/* rodapé em grade */
+.fg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; border-top: 1px solid var(--line); padding-top: 7px; }
+.fg div { display: flex; flex-direction: column; min-width: 0; }
+.fg span { font-size: 10.5px; color: var(--mut); }
+.fg b { font: 600 12.5px var(--mono); color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fg b.wht { color: var(--wht, #fff); } .fg b.warn { color: var(--org); }
+.fg b small { font-weight: 400; color: var(--mut); font-size: 10.5px; }
+/* aviso de margem cheia */
+.mgw { font-size: 12px; color: var(--red); background: rgba(237,112,136,.14); border-radius: 6px; padding: 5px 8px; margin-top: 2px; }
+/* chips com esmaecido na borda direita */
+.sortw { position: relative; }
+.sortw::after { content: ''; position: absolute; right: 0; top: 0; bottom: 2px; width: 34px; pointer-events: none; background: linear-gradient(90deg, transparent, var(--bg)); }
+/* melhor e pior preço desde a entrada: linha pontilhada */
+.xl { position: absolute; top: -2px; height: 22px; width: 0; border-left: 1px dashed; z-index: 3; pointer-events: none; opacity: .95; }
+.xl.up { border-color: var(--teal); } .xl.dn { border-color: var(--red); }
+.ext, .glow { display: none; }
+:root { --wht: #ffffff; }
+
+/* ===== tema claro ===== */
+html[data-theme=light] { --bg: #f3f5f6; --pan: #ffffff; --line: #dbe2e5; --head: #56626a; --txt: #132028; --teal: #0e9384; --red: #d23f5c; --mut: #87929a; --org: #c26f16; --wht: #132028; color-scheme: light; }
+html[data-theme=light] .wht { color: #132028; }
+html[data-theme=light] .en { background: #132028; }
+html[data-theme=light] .lb .md { color: #132028; }
+html[data-theme=light] .rk { background: rgba(210,63,92,.15); color: #a3243d; }
+html[data-theme=light] .pg { background: rgba(14,147,132,.12); color: #0b6b60; }
+html[data-theme=light] .pg.dn { background: #0e9384; color: #fff; }
+html[data-theme=light] .pg.un { background: repeating-linear-gradient(135deg, rgba(0,0,0,.08) 0 4px, transparent 4px 8px); }
+html[data-theme=light] .trav.up { background: rgba(14,147,132,.30); } html[data-theme=light] .trav.dn { background: rgba(210,63,92,.30); }
+html[data-theme=light] .txl span { text-shadow: none; }
+html[data-theme=light] .txl .t-rk { color: #a3243d; } html[data-theme=light] .txl .t-gn { color: #0b6b60; } html[data-theme=light] .txl .t-dn { color: #fff; }
+html[data-theme=light] .err { background: #fde8ec; color: #a3243d; }
+html[data-theme=light] .nosl { background: #fde8ec; }
+html[data-theme=light] .lang button.on { background: #e5edef; }
+html[data-theme=light] .selo { background: #e3effc; color: #1c5fa8; }
+html[data-theme=light] .fsel { background: #e7ecee; color: #4a555c; } html[data-theme=light] .fsel.tp, html[data-theme=light] .fsel.sl { color: #fff; }
+html[data-theme=light] .fxm b { color: #fff; }
+html[data-theme=light] .mgw { background: #fde8ec; }
+html[data-theme=light] .mgb i { background: rgba(255,255,255,.9); }
+html[data-theme=light] .spin { border-color: #c8d0d4; border-top-color: var(--teal); }
