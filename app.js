@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.16';
+const VERSION = '1.0.17';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -110,12 +110,31 @@ function labels(t, sl, ent, right, sub) {
   const x = lo <= hi ? Math.max(lo, Math.min(hi, ent)) : 0.5;
   return `<div class="lb"><span class="sh">${sT}</span><span class="md" style="left:${(x * 100).toFixed(1)}%">${eT}</span><span class="lg">${right}${sub ? ` <small>· ${sub}</small>` : ''}</span></div>`;
 }
+// SL no lucro: a barra começa na entrada; entrada → SL = lucro travado (dourado), SL → último TP = o que ainda pode ganhar
+function lockBar(t, p, pl, L, sl, far) {
+  const w = W(), clamp = (x) => Math.max(0, Math.min(1, x));
+  const f = (q) => clamp((q - t.entry) / (far - t.entry)), fs = f(sl);
+  const k = Math.max(0.22, Math.min(0.78, fs));
+  const at = (q) => { const v = f(q); return v <= fs ? (fs ? k * v / fs : 0) : k + (1 - k) * (v - fs) / (1 - fs || 1); };
+  const pos = p ? at(p) : null;
+  const bw = bestWorst(EXT.get(t.id), t, p);
+  const trav = traveled(k, pos, bw && { fav: bw.best != null ? at(bw.best) : null, adv: null });
+  const locked = L.ifSl, more = L.ifAll != null && locked != null ? L.ifAll - locked : null;
+  const cw = 6.4, eT = fmtPrice(t.entry), sT = 'SL ' + fmtPrice(sl), fT = fmtPrice(far);
+  const lx = Math.min(1 - (fT.length + sT.length / 2) * cw / w - 0.02, Math.max(k, (eT.length + sT.length / 2) * cw / w + 0.02));
+  return `<div class="tpb lkb"><div class="trk">${trav}<div class="rk lk" style="width:${k * 100}%"></div><div class="pgs"><div class="pg" style="flex:1"></div></div>
+    <div class="txl"><span class="t-lk" style="width:${k * 100}%">${locked != null && inTxt(locked, k - 0.06) ? '🔒 ' + inTxt(locked, k - 0.06) : ''}</span><div class="txg"><span class="t-gn" style="flex:1">${inTxt(more, 1 - k)}</span></div></div>
+    <i class="en lkx" style="left:${k * 100}%"></i>${arrow(pos, pl)}</div>
+    <div class="lb"><span class="lf">${eT}</span><span class="lkp" style="left:${(lx * 100).toFixed(1)}%">${sT}</span><span class="lg">${fT}</span></div></div>`;
+}
 function bar(t, p, pl, roe, L) {
   const sl = t.sl, s = t.dir === 'baixa' ? -1 : 1;
   if (sl == null || !L.levels.length) {
     return `<div class="tpn"><span class="muted">${tr('entry')}</span> <b class="mono">${fmtPrice(t.entry)}</b> ${sl == null ? `<span class="nosl">${tr('noSl')}</span>` : `<span class="neg mono">SL ${fmtPrice(sl)}</span> <span class="muted">${tr('noTp')}</span>`}</div>`;
   }
   const w = W();
+  const far = L.pend.length ? L.pend[L.pend.length - 1].px : null;
+  if (s * (sl - t.entry) > 0 && far != null && s * (far - sl) > 0) return lockBar(t, p, pl, L, sl, far);
   const RED = Math.max(0.22, Math.min(0.42, (fmtPrice(sl).length * 6.4 + 8) / w));
   const segs = L.levels.map((x) => ({ w: x.pctOrig, px: x.px, done: x.done, win: x.win !== false, net: x.net }));
   const unc = L.uncovered / (L.orig || 1);
@@ -241,7 +260,7 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   const pc = (v) => (v > 1 ? '> 100' : String(Math.round(Math.max(0, v) * 100))) + '%';
   // no lucro (0% do caminho) mostra também a distância do preço, para o desempate ficar visível
   const dd = (v, d) => (v <= 0 && d != null ? ` <small>· ${tr('away', { p: fmt1(d * 100) + '%' })}</small>` : '');
-  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : 'neg'}">${slP != null ? tr('distSl', { p: pc(slP) }) + dd(slP, slD) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) + dd(tpP, tpD) : tr('noTp')}</span></div>`;
+  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : 'neg'}">${slP != null ? (t.sl && (t.dir === 'baixa' ? -1 : 1) * (t.sl - t.entry) > 0 && L.ifSl != null ? `<b class="lkt">${tr('locked', { v: num(L.ifSl), p: pc(slP) })}</b>` : tr('distSl', { p: pc(slP) }) + dd(slP, slD)) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) + dd(tpP, tpD) : tr('noTp')}</span></div>`;
   const rrv = L.rr == null ? '' : `<div class="dst rrl"><span></span><span class="${hk === 'rr' ? 'on' : ''}">R/R <b>${L.rr === Infinity ? tr('noRisk') : fmt1(L.rr)}</b></span></div>`;
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
   const partial = t.parts?.length;

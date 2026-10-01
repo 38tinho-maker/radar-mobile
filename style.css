@@ -220,3 +220,13 @@ html[data-theme=light] .spin { border-color: #c8d0d4; border-top-color: var(--te
 .trk .xl.up { border-top-color: var(--teal); border-left-color: transparent; } .trk .xl.dn { border-top-color: var(--red); border-left-color: transparent; }
 
 .dst.rrl { margin-top: -6px; } .dst.rrl b { font-family: var(--mono); color: var(--txt); }
+
+/* SL no lucro: trecho travado em dourado */
+.rk.lk { background: rgba(232,196,106,.36); }
+.txl .t-lk { flex: none; color: #f6e3a8; }
+.en.lkx { background: #e8c46a; }
+.lkb .lb .lf { position: absolute; left: 0; color: #fff; font-weight: 700; }
+.lkb .lb .lkp { position: absolute; transform: translateX(-50%); color: #e8c46a; }
+.dst .lkt { color: #e8c46a; font-weight: 500; }
+html[data-theme=light] .dst .lkt, html[data-theme=light] .lkb .lb .lkp { color: #9a7412; }
+html[data-theme=light] .lkb .lb .lf { color: var(--txt); }
