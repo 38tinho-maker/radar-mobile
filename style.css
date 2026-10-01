@@ -230,3 +230,6 @@ html[data-theme=light] .spin { border-color: #c8d0d4; border-top-color: var(--te
 .dst .lkt { color: #e8c46a; font-weight: 500; }
 html[data-theme=light] .dst .lkt, html[data-theme=light] .lkb .lb .lkp { color: #9a7412; }
 html[data-theme=light] .lkb .lb .lf { color: var(--txt); }
+
+/* sem TP: lado do lucro listrado (1R) */
+.ntb .lb .r1 { position: absolute; right: 0; color: var(--mut); }
