@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.20';
+const VERSION = '1.0.21';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -103,7 +103,7 @@ function traveled(ent, pos, run) {
   // melhor e pior preço desde a entrada: linha pontilhada fina
   const ln = (x, c) => `<i class="xl ${c}" style="left:${(Math.max(0, Math.min(1, x)) * 100).toFixed(2)}%"></i>`;
   // valor ao lado de cada setinha: quanto o trade chegou a ganhar (melhor ponto) e a perder (pior ponto)
-  const vl = (x, v, c, right) => { if (v == null || !isFinite(v) || !run.fmt) return ''; const f = Math.max(0, Math.min(1, x)); const side = right ? f < 0.84 : f < 0.16; return `<span class="xv ${c}${side ? '' : ' l'}" style="left:${(f * 100).toFixed(2)}%">${run.fmt(v)}</span>`; };
+  const vl = (x, v, c, right) => { if (v == null || !isFinite(v) || !run.fmt) return ''; const f = Math.max(0, Math.min(1, x)); return `<span class="xv ${c}${right ? '' : ' l'}" style="left:${(f * 100).toFixed(2)}%">${run.fmt(v)}</span>`; };
   if (run?.fav != null && Math.abs(run.fav - ent) > 0.004) out += ln(run.fav, 'up') + vl(run.fav, run.fv, 'up', true);
   if (run?.adv != null && Math.abs(run.adv - ent) > 0.004) out += ln(run.adv, 'dn') + vl(run.adv, run.av, 'dn', false);
   return out;
