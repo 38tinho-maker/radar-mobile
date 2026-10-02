@@ -233,3 +233,9 @@ html[data-theme=light] .lkb .lb .lf { color: var(--txt); }
 
 /* sem TP: lado do lucro listrado (1R) */
 .ntb .lb .r1 { position: absolute; right: 0; color: var(--mut); }
+
+/* valor do melhor/pior ponto ao lado das setinhas */
+.trk:has(.xv) { margin-top: 18px; }
+.xv { position: absolute; top: -19px; margin-left: 6px; font: 600 10.5px var(--mono); white-space: nowrap; pointer-events: none; z-index: 4; }
+.xv.l { margin-left: -6px; transform: translateX(-100%); }
+.xv.up { color: var(--teal); } .xv.dn { color: var(--red); }

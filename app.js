@@ -8,7 +8,7 @@ import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/
 import { extStore, bestWorst } from './lib/runext.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.18';
+const VERSION = '1.0.20';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -94,14 +94,18 @@ function arrow(pos, pl) {
 }
 // trecho percorrido: forte = entrada → agora; claro com brilho = até o melhor e o pior ponto desde a entrada.
 // Os preenchimentos passam por baixo dos segmentos (o TP executado fica na cor cheia); por cima, só o contorno.
+// resultado (US$) que o trade chegou a ter no melhor e no pior ponto desde a entrada (no tamanho aberto agora)
+function mmv(t, bw) { const s = t.dir === 'baixa' ? -1 : 1, q = restQty(t), at = (px) => (px != null ? s * (px - t.entry) * q : null); return { fv: at(bw.best), av: at(bw.worst), fmt: num }; }
 function traveled(ent, pos, run) {
   const box = (a, b, c) => { const x = Math.max(0, Math.min(a, b)), y = Math.min(1, Math.max(a, b)); return y - x < 0.002 ? '' : `<div class="${c}" style="left:${(x * 100).toFixed(2)}%;width:${((y - x) * 100).toFixed(2)}%"></div>`; };
   let out = '';
   if (pos != null) out += box(ent, pos, `trav ${pos >= ent ? 'up' : 'dn'}`);
   // melhor e pior preço desde a entrada: linha pontilhada fina
   const ln = (x, c) => `<i class="xl ${c}" style="left:${(Math.max(0, Math.min(1, x)) * 100).toFixed(2)}%"></i>`;
-  if (run?.fav != null && Math.abs(run.fav - ent) > 0.004) out += ln(run.fav, 'up');
-  if (run?.adv != null && Math.abs(run.adv - ent) > 0.004) out += ln(run.adv, 'dn');
+  // valor ao lado de cada setinha: quanto o trade chegou a ganhar (melhor ponto) e a perder (pior ponto)
+  const vl = (x, v, c, right) => { if (v == null || !isFinite(v) || !run.fmt) return ''; const f = Math.max(0, Math.min(1, x)); const side = right ? f < 0.84 : f < 0.16; return `<span class="xv ${c}${side ? '' : ' l'}" style="left:${(f * 100).toFixed(2)}%">${run.fmt(v)}</span>`; };
+  if (run?.fav != null && Math.abs(run.fav - ent) > 0.004) out += ln(run.fav, 'up') + vl(run.fav, run.fv, 'up', true);
+  if (run?.adv != null && Math.abs(run.adv - ent) > 0.004) out += ln(run.adv, 'dn') + vl(run.adv, run.av, 'dn', false);
   return out;
 }
 function labels(t, sl, ent, right, sub) {
@@ -118,7 +122,7 @@ function lockBar(t, p, pl, L, sl, far) {
   const at = (q) => { const v = f(q); return v <= fs ? (fs ? k * v / fs : 0) : k + (1 - k) * (v - fs) / (1 - fs || 1); };
   const pos = p ? at(p) : null;
   const bw = bestWorst(EXT.get(t.id), t, p);
-  const trav = traveled(k, pos, bw && { fav: bw.best != null ? at(bw.best) : null, adv: null });
+  const trav = traveled(k, pos, bw && { fav: bw.best != null ? at(bw.best) : null, adv: null, ...mmv(t, bw) , av: null });
   const locked = L.ifSl, more = L.ifAll != null && locked != null ? L.ifAll - locked : null;
   const cw = 6.4, eT = fmtPrice(t.entry), sT = 'SL ' + fmtPrice(sl), fT = fmtPrice(far);
   const lx = Math.min(1 - (fT.length + sT.length / 2) * cw / w - 0.02, Math.max(k, (eT.length + sT.length / 2) * cw / w + 0.02));
@@ -133,7 +137,7 @@ function noTpBar(t, p, pl, L, sl) {
   const posAt = (q) => { const d = s * (q - t.entry); return d <= 0 ? ent * (1 - Math.min(1, -d / risk)) : ent + (1 - ent) * Math.min(1, d / risk); };
   const pos = p ? posAt(p) : null;
   const bw = bestWorst(EXT.get(t.id), t, p);
-  const trav = traveled(ent, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null });
+  const trav = traveled(ent, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null, ...mmv(t, bw) });
   const slV = L.ifSl != null ? L.ifSl - L.realized : null, over = p && s * (p - r1) > 0;
   return `<div class="tpb ntb"><div class="trk">${trav}<div class="rk" style="width:50%"></div><div class="pgs"><div class="pg un" style="flex:1"></div></div>
     <div class="txl"><span class="t-rk" style="width:50%">${inTxt(slV, ent)}</span><div class="txg"><span class="t-un" style="flex:1">${tr('noTp')}${over ? ' ▸' : ''}</span></div></div>
@@ -169,7 +173,7 @@ function bar(t, p, pl, roe, L) {
   };
   const pos = p ? posAt(p) : null;
   const bw = bestWorst(EXT.get(t.id), t, p);
-  const trav = traveled(RED, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null });
+  const trav = traveled(RED, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null, ...mmv(t, bw) });
 
   const slV = L.ifSl != null ? L.ifSl - L.realized : null;
   const html = segs.map((g) => `<div class="pg${g.done ? ' dn' : ''}${g.unc ? ' un' : ''}" style="flex:${(g.w / tot).toFixed(4)}"></div>`).join('');
@@ -249,13 +253,13 @@ function posView() {
   for (const r of rows) { tPl += r.pl || 0; if (r.L.ifSl != null) { tSl += r.L.ifSl - r.L.realized; nSl++; } if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0); nTp++; } }
   const k = S.sort.k, d = S.sort.d;
   // SL no lucro (stop gain) e R/R sem risco vão para o fim
-  const key = { nsl: (r) => (r.slP == null || (r.t.sl && (r.t.dir === 'baixa' ? -1 : 1) * (r.t.sl - r.t.entry) > 0) ? Infinity : -r.slP), ntp: (r) => (r.tpP == null ? Infinity : -r.tpP), rr: (r) => (r.L.rr == null || r.L.rr === Infinity ? Infinity : r.L.rr), pnl: (r) => r.pl || 0, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
+  const key = { nsl: (r) => (r.slP == null || (r.t.sl && (r.t.dir === 'baixa' ? -1 : 1) * (r.t.sl - r.t.entry) > 0) ? Infinity : -r.slP), ntp: (r) => (r.tpP == null ? Infinity : -r.tpP), rr: (r) => (r.L.rr == null || r.L.rr === Infinity ? Infinity : r.L.rr), pnl: (r) => r.pl || 0, open: (r) => r.t.openedAt || Infinity, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
   rows.sort((a, b) => { const x = key(a), y = key(b); if (x === Infinity || y === Infinity) return (x === Infinity) - (y === Infinity); return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d; });
   const chip = (kk, l) => `<button class="chip${k === kk ? ' on' : ''}" data-sort="${kk}">${l}${k === kk ? (d > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   return `<section class="tiles"><div class="tile"><span>${tr('tab.pos')}</span><b>${rows.length}</b></div><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
     ${marginBar(account)}
     <div class="tot">${nSl ? `${tr('allSl')} <b class="neg">${num(tSl)}</b>` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
-    <div class="sortw"><div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('rr', 'R/R')}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div></div>
+    <div class="sortw"><div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('rr', 'R/R')}${chip('open', tr('sort.open'))}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div></div>
     ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}
     ${finView()}`;
 }
@@ -289,7 +293,7 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   const liqTx = !t.liq ? '—' : liqD > 1 ? tr('far') : fmtPrice(t.liq);
   const cell = (k, v, c = '') => `<div><span>${k}</span><b class="${c}">${v}</b></div>`;
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
-    <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
+    <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}${hk === 'open' && t.openedAt ? `<span class="lev">· ${dur(Date.now() - t.openedAt)}</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
     ${bar(t, p, pl, roe, L)}
     ${dist}${rrv}
     <div class="fg">${cell(tr('mark'), p ? fmtPrice(p) : '—', 'wht')}${cell(tr('liq'), liqTx, isFinite(liqD) && liqD < 0.1 ? 'warn' : '')}${cell(tr('margin'), t.margin ? usd(t.margin, false) : '—')}${cell(tr('size'), `${qty(t.qty)}${partial ? `<small>/${qty(origQty(t))}</small>` : ''}`)}</div>
@@ -385,7 +389,7 @@ function bind() {
   document.querySelectorAll('nav [data-tab]').forEach((b) => (b.onclick = () => { S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); }));
   document.querySelectorAll('[data-sort]').forEach((b) => (b.onclick = () => {
     const k = b.dataset.sort;
-    S.sort = S.sort.k === k ? { k, d: -S.sort.d } : { k, d: ['mkt', 'liq', 'nsl', 'ntp'].includes(k) ? 1 : -1 };
+    S.sort = S.sort.k === k ? { k, d: -S.sort.d } : { k, d: ['mkt', 'liq', 'nsl', 'ntp', 'open'].includes(k) ? 1 : -1 };
     ls.set('sort', S.sort); render();
   }));
   document.querySelectorAll('[data-days]').forEach((b) => (b.onclick = () => { S.histDays = +b.dataset.days; render(); }));
