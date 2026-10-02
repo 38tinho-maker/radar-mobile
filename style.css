@@ -239,3 +239,42 @@ html[data-theme=light] .lkb .lb .lf { color: var(--txt); }
 .xv { position: absolute; top: -19px; margin-left: 6px; font: 600 10.5px var(--mono); white-space: nowrap; pointer-events: none; z-index: 4; }
 .xv.l { margin-left: -6px; transform: translateX(-100%); }
 .xv.up { color: var(--teal); } .xv.dn { color: var(--red); }
+/* ===== régua TP/SL (B2·2·2) ===== */
+.rg { display: grid; grid-template-columns: auto 1fr auto; column-gap: 6px; align-items: center; padding-top: 22px; }
+.rg-t { position: relative; height: 16px; min-width: 60px; }
+.rg-r, .rg-g { position: absolute; top: 6px; height: 4px; }
+.rg-r { background: rgba(237,112,136,.6); border-radius: 2px 0 0 2px; }
+.rg-g { background: rgba(80,210,193,.45); border-radius: 0 2px 2px 0; }
+.rg.rg-lk .rg-r { background: rgba(232,196,106,.65); }
+.rg.rg-nt .rg-g, .rg-un { background: repeating-linear-gradient(135deg, rgba(148,158,156,.55) 0 3px, transparent 3px 6px); }
+.rg-un { position: absolute; top: 5px; height: 6px; }
+.rg-c { position: absolute; top: 1px; height: 14px; border-radius: 7px; opacity: .28; }
+.rg-c.dn { background: #ed7088; } .rg-c.up { background: #50d2c1; }
+.rg-d { position: absolute; top: 4px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; border: 1.5px solid #50d2c1; background: #0b1216; box-sizing: border-box; z-index: 2; }
+.rg-d.dn { background: #50d2c1; } .rg-d.ls { border-color: #ed7088; background: #ed7088; }
+.rg-en { position: absolute; top: -1px; width: 2px; height: 18px; margin-left: -1px; background: #fff; z-index: 2; }
+.rg.rg-lk .rg-en { background: #e8c46a; }
+.rg-p { position: absolute; top: 3px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #0b1216; border: 2.5px solid; box-sizing: border-box; z-index: 3; }
+.rg-p.up { border-color: #50d2c1; } .rg-p.dn { border-color: #ed7088; }
+.rg-ch { position: absolute; top: -23px; transform: translateX(-50%); padding: 0 6px; border-radius: 4px; border: 1px solid; white-space: nowrap; font-weight: 700; font-size: 11px; line-height: 15px; z-index: 4; }
+.rg-ch.up { color: #50d2c1; background: #13302d; border-color: #50d2c1; } .rg-ch.dn { color: #ed7088; background: #34191b; border-color: #ed7088; }
+.rg-ch.el { transform: translateX(-15%); } .rg-ch.er { transform: translateX(-85%); }
+.rg-bc { position: absolute; top: -7px; margin-left: -4px; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid; z-index: 4; }
+.rg-bc.up { border-top-color: #50d2c1; } .rg-bc.dn { border-top-color: #ed7088; }
+.rg-e { padding: 0 7px; border-radius: 9px; border: 1px solid; white-space: nowrap; font-weight: 600; font-size: 11px; line-height: 16px; }
+.rg-e.c-sh { color: #ed7088; background: rgba(237,112,136,.14); border-color: rgba(237,112,136,.55); }
+.rg-e.c-lg { color: #50d2c1; background: rgba(80,210,193,.14); border-color: rgba(80,210,193,.55); }
+.rg-e.c-lk { color: #e8c46a; background: rgba(232,196,106,.14); border-color: rgba(232,196,106,.55); }
+.rg-e.c-en { color: #e6ecea; background: rgba(230,236,234,.08); border-color: rgba(230,236,234,.4); }
+.rg-e.c-mu { color: #949e9c; background: rgba(148,158,156,.1); border-color: rgba(148,158,156,.4); }
+.rg-b { position: relative; height: 15px; margin-top: 3px; font-size: 11px; }
+.rg-b span { position: absolute; white-space: nowrap; }
+.rg-b .rb-l { left: 0; } .rg-b .rb-r { right: 0; } .rg-b .rb-m { transform: translateX(-50%); font-weight: 700; color: #fff; }
+.rg-b .c-sh { color: #ed7088; } .rg-b .c-lg { color: #50d2c1; } .rg-b .c-lk { color: #e8c46a; } .rg-b .c-mu { color: #949e9c; }
+.rg-b small { font-size: 10.5px; color: #949e9c; }
+.rg.warn .rg-t { box-shadow: 0 0 0 2px rgba(240,163,94,.6); border-radius: 8px; }
+.rg { width: 100%; } .rg-ch, .rg-e, .rg-b { font-family: var(--mono); }
+html[data-theme=light] .rg-p, html[data-theme=light] .rg-d:not(.dn):not(.ls) { background: #fff; }
+html[data-theme=light] .rg-ch.up { background: #e3f6f2; } html[data-theme=light] .rg-ch.dn { background: #fde8ec; }
+html[data-theme=light] .rg-b .rb-m { background: none; color: var(--txt); }
+html[data-theme=light] .rg-en { background: var(--txt); }

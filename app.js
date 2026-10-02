@@ -6,9 +6,10 @@ import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice, setPriceLocale } from './lib/format.js';
 import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/i18n.js';
 import { extStore, bestWorst } from './lib/runext.js';
+import { ruler } from './lib/ruler.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.21';
+const VERSION = '1.0.22';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -116,34 +117,31 @@ function labels(t, sl, ent, right, sub) {
 }
 // SL no lucro: a barra começa na entrada; entrada → SL = lucro travado (dourado), SL → último TP = o que ainda pode ganhar
 function lockBar(t, p, pl, L, sl, far) {
-  const w = W(), clamp = (x) => Math.max(0, Math.min(1, x));
+  const clamp = (x) => Math.max(0, Math.min(1, x));
   const f = (q) => clamp((q - t.entry) / (far - t.entry)), fs = f(sl);
   const k = Math.max(0.22, Math.min(0.78, fs));
   const at = (q) => { const v = f(q); return v <= fs ? (fs ? k * v / fs : 0) : k + (1 - k) * (v - fs) / (1 - fs || 1); };
-  const pos = p ? at(p) : null;
   const bw = bestWorst(EXT.get(t.id), t, p);
-  const trav = traveled(k, pos, bw && { fav: bw.best != null ? at(bw.best) : null, adv: null, ...mmv(t, bw) , av: null });
   const locked = L.ifSl, more = L.ifAll != null && locked != null ? L.ifAll - locked : null;
-  const cw = 6.4, eT = fmtPrice(t.entry), sT = 'SL ' + fmtPrice(sl), fT = fmtPrice(far);
-  const lx = Math.min(1 - (fT.length + sT.length / 2) * cw / w - 0.02, Math.max(k, (eT.length + sT.length / 2) * cw / w + 0.02));
-  return `<div class="tpb lkb"><div class="trk">${trav}<div class="rk lk" style="width:${k * 100}%"></div><div class="pgs"><div class="pg" style="flex:1"></div></div>
-    <div class="txl"><span class="t-lk" style="width:${k * 100}%">${locked != null && inTxt(locked, k - 0.06) ? '🔒 ' + inTxt(locked, k - 0.06) : ''}</span><div class="txg"><span class="t-gn" style="flex:1">${inTxt(more, 1 - k)}</span></div></div>
-    <i class="en lkx" style="left:${k * 100}%"></i>${arrow(pos, pl)}</div>
-    <div class="lb"><span class="lf">${eT}</span><span class="lkp" style="left:${(lx * 100).toFixed(1)}%">${sT}</span><span class="lg">${fT}</span></div></div>`;
+  const lT = fmtPrice(t.entry), rT = fmtPrice(far);
+  return ruler({ k, pos: p ? at(p) : null, cap: bw?.best != null ? { a: k, b: at(bw.best) } : null, chip: chipOf(pl), mode: 'lk', tw: rgTw(lT, rT),
+    left: { t: lT, cls: 'en' }, right: { t: rT, cls: 'lg' },
+    bot: { l: { t: locked != null ? '🔒 ' + num(locked) : '', cls: 'lk' }, m: { t: 'SL ' + fmtPrice(sl), cls: 'lk' }, r: { t: num(more), cls: 'lg' } } });
 }
 // sem TP (opção A): vermelho até o SL; lado do lucro listrado "sem TP" com o mesmo tamanho do risco (1R)
 function noTpBar(t, p, pl, L, sl) {
   const s = t.dir === 'baixa' ? -1 : 1, risk = Math.abs(t.entry - sl), r1 = t.entry + s * risk, ent = 0.5;
   const posAt = (q) => { const d = s * (q - t.entry); return d <= 0 ? ent * (1 - Math.min(1, -d / risk)) : ent + (1 - ent) * Math.min(1, d / risk); };
-  const pos = p ? posAt(p) : null;
-  const bw = bestWorst(EXT.get(t.id), t, p);
-  const trav = traveled(ent, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null, ...mmv(t, bw) });
   const slV = L.ifSl != null ? L.ifSl - L.realized : null, over = p && s * (p - r1) > 0;
-  return `<div class="tpb ntb"><div class="trk">${trav}<div class="rk" style="width:50%"></div><div class="pgs"><div class="pg un" style="flex:1"></div></div>
-    <div class="txl"><span class="t-rk" style="width:50%">${inTxt(slV, ent)}</span><div class="txg"><span class="t-un" style="flex:1">${tr('noTp')}${over ? ' ▸' : ''}</span></div></div>
-    <i class="en" style="left:50%"></i>${arrow(pos, pl)}</div>
-    <div class="lb"><span class="sh">${fmtPrice(sl)}</span><span class="md" style="left:50%">${fmtPrice(t.entry)}</span><span class="r1">1R ${fmtPrice(r1)}</span></div></div>`;
+  const lT = fmtPrice(sl), rT = '1R ' + fmtPrice(r1);
+  return ruler({ k: ent, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), chip: chipOf(pl), mode: 'nt', tw: rgTw(lT, rT),
+    left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'mu' },
+    bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: tr('noTp') + (over ? ' ▸' : ''), cls: 'mu' } } });
 }
+// ----- régua (B2·2·2), igual à Carteira -----
+const rgTw = (l, r) => W() - (l.length + r.length) * 6.8 - 40;
+function capOf(t, p, posAt) { const bw = bestWorst(EXT.get(t.id), t, p); return bw ? { a: bw.worst != null ? posAt(bw.worst) : null, b: bw.best != null ? posAt(bw.best) : null } : null; }
+const chipOf = (pl) => (pl != null && isFinite(pl) ? { t: usd(pl), up: pl >= 0 } : null);
 function bar(t, p, pl, roe, L) {
   const sl = t.sl, s = t.dir === 'baixa' ? -1 : 1;
   if (sl != null && !L.levels.length && s * (sl - t.entry) < 0) return noTpBar(t, p, pl, L, sl);
@@ -171,17 +169,15 @@ function bar(t, p, pl, roe, L) {
     }
     return Math.min(x, 1);
   };
-  const pos = p ? posAt(p) : null;
-  const bw = bestWorst(EXT.get(t.id), t, p);
-  const trav = traveled(RED, pos, bw && { fav: bw.best != null ? posAt(bw.best) : null, adv: bw.worst != null ? posAt(bw.worst) : null, ...mmv(t, bw) });
-
   const slV = L.ifSl != null ? L.ifSl - L.realized : null;
-  const html = segs.map((g) => `<div class="pg${g.done ? ' dn' : ''}${g.unc ? ' un' : ''}" style="flex:${(g.w / tot).toFixed(4)}"></div>`).join('');
-  // valores numa camada própria, por cima do brilho (sempre legíveis)
-  const txs = segs.map((g) => { const fr = (1 - RED) * g.w / tot; const tx = g.unc ? (fr * w > 44 ? tr('noTp') : '') : inTxt(g.net, fr - (g.done ? 0.04 : 0)); return `<span class="${g.done ? 't-dn' : g.unc ? 't-un' : 't-gn'}" style="flex:${(g.w / tot).toFixed(4)}">${g.done && tx ? '✓' : ''}${tx}</span>`; }).join('');
   const nD = L.done.length, nA = L.levels.length, last = L.pend.length ? L.pend[L.pend.length - 1].px : L.levels[nA - 1].px;
-  return `<div class="tpb"><div class="trk">${trav}<div class="rk" style="width:${RED * 100}%"></div><div class="pgs">${html}</div><div class="txl"><span class="t-rk" style="width:${RED * 100}%">${inTxt(slV, RED)}</span><div class="txg">${txs}</div></div><i class="en" style="left:${RED * 100}%"></i>${arrow(pos, pl)}</div>
-    ${labels(t, sl, RED, fmtPrice(last), nA > 1 ? (nD ? tr('tpsOf', { d: nD, a: nA }) : tr('tps', { a: nA })) : '')}</div>`;
+  const dots = nA > 1 ? L.levels.map((x) => ({ x: posAt(x.px), done: x.done, loss: x.done && x.win === false })) : [];
+  const tail = unc > 0.005 ? posAt(L.levels[nA - 1].px) : null;
+  const rest = L.pend.reduce((a, x) => a + x.net, 0);
+  const lT = fmtPrice(sl), rT = fmtPrice(last);
+  return ruler({ k: RED, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), dots, tail, chip: chipOf(pl), tw: rgTw(lT, rT),
+    left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'lg' },
+    bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: L.pend.length ? num(rest) : '', cls: 'lg', sub: nA > 1 ? (nD ? tr('tpsOf', { d: nD, a: nA }) : tr('tps', { a: nA })) : '' } } });
 }
 
 // ---------- telas ----------
