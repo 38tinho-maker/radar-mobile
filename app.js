@@ -9,7 +9,7 @@ import { extStore, bestWorst } from './lib/runext.js';
 import { ruler } from './lib/ruler.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.22';
+const VERSION = '1.0.24';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -245,8 +245,14 @@ function posView() {
       // quanto do caminho entrada → SL (ou → próximo TP) o preço já percorreu (0 = na entrada, 1 = chegou)
       slP: slProg(t, p), slD: t.sl && p ? Math.abs(p - t.sl) / p : null, tpD: nx && p ? Math.abs(nx.px - p) / p : null, tpP: nx && p && nx.px !== t.entry ? (p - t.entry) / (nx.px - t.entry) : null, tpN: nx && L.levels.length > 1 ? nx.n : null };
   });
-  let tPl = 0, tSl = 0, tTp = 0, nSl = 0, nTp = 0;
-  for (const r of rows) { tPl += r.pl || 0; if (r.L.ifSl != null) { tSl += r.L.ifSl - r.L.realized; nSl++; } if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0); nTp++; } }
+  let tPl = 0, tLose = 0, tLock = 0, tTp = 0, nSl = 0, nTp = 0;
+  // se os SL baterem: perda (risco real) separada do lucro travado; TPs = soma dos valores embaixo das barras
+  for (const r of rows) {
+    tPl += r.pl || 0; let leg = 0;
+    if (r.L.ifSl != null) { leg = r.L.ifSl - r.L.realized; if (leg < 0) tLose += leg; else tLock += leg; nSl++; }
+    const inP = r.t.sl && (r.t.dir === 'baixa' ? -1 : 1) * (r.t.sl - r.t.entry) > 0;
+    if (r.L.pend.length) { tTp += r.L.pend.reduce((a, x) => a + x.net, 0) - (inP ? leg : 0); nTp++; }
+  }
   const k = S.sort.k, d = S.sort.d;
   // SL no lucro (stop gain) e R/R sem risco vão para o fim
   const key = { nsl: (r) => (r.slP == null || (r.t.sl && (r.t.dir === 'baixa' ? -1 : 1) * (r.t.sl - r.t.entry) > 0) ? Infinity : -r.slP), ntp: (r) => (r.tpP == null ? Infinity : -r.tpP), rr: (r) => (r.L.rr == null || r.L.rr === Infinity ? Infinity : r.L.rr), pnl: (r) => r.pl || 0, open: (r) => r.t.openedAt || Infinity, mkt: (r) => coin(r.t), size: (r) => r.val, liq: (r) => r.liqD, margin: (r) => r.t.margin || 0, funding: (r) => r.t.funding || 0 }[k] || ((r) => r.pl || 0);
@@ -254,7 +260,7 @@ function posView() {
   const chip = (kk, l) => `<button class="chip${k === kk ? ' on' : ''}" data-sort="${kk}">${l}${k === kk ? (d > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   return `<section class="tiles"><div class="tile"><span>${tr('tab.pos')}</span><b>${rows.length}</b></div><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
     ${marginBar(account)}
-    <div class="tot">${nSl ? `${tr('allSl')} <b class="neg">${num(tSl)}</b>` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
+    <div class="tot">${nSl ? `${tr('slLose')} <b class="neg">${num(tLose)}</b>${tLock > 0 ? ` · ${tr('slLock')} <b class="lkc">${num(tLock)}</b>` : ''}` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
     <div class="sortw"><div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('rr', 'R/R')}${chip('open', tr('sort.open'))}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div></div>
     ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}
     ${finView()}`;
@@ -315,21 +321,14 @@ function finCard(t) {
 function finBar(t) {
   const M = finModel(t);
   if (!M.sl) return `<div class="tpn"><span class="muted">${tr('entry')}</span> <b class="mono">${fmtPrice(t.entry)}</b> → <span class="muted">${tr('fin.exit')}</span> <b class="mono">${fmtPrice(M.exitPx)}</b></div>`;
-  const w = W();
-  const RED = Math.max(0.22, Math.min(0.42, (fmtPrice(M.sl).length * 6.4 + 8) / w));
-  const posAt = finPosAt(t, M, RED), ex = posAt(M.exitPx);
-  const tot = M.segs.reduce((a, g) => a + g.w, 0) || 1;
-  const segs = M.segs.length ? M.segs.map((g) => `<div class="pg${g.done ? ' dn' : ''}" style="flex:${(g.w / tot).toFixed(4)}"></div>`).join('') : '<div class="pg" style="flex:1"></div>';
-  const txs = M.segs.map((g) => { const fr = (1 - RED) * g.w / tot; const tx = inTxt(g.net, fr - (g.done ? 0.04 : 0)); return `<span class="${g.done ? 't-dn' : 't-gn'}" style="flex:${(g.w / tot).toFixed(4)}">${g.done && tx ? '✓' : ''}${tx}</span>`; }).join('');
-  const hit = M.lossNet != null && M.lossNet < 0;
-  const redTx = hit ? (inTxt(M.lossNet, RED - 0.05) ? '✕ ' + inTxt(M.lossNet, RED - 0.05) : '') : inTxt(M.risk, RED);
-  const k = M.exitWin ? 'up' : 'dn', a = Math.min(RED, ex), wd = Math.abs(ex - RED);
-  const nA = M.nAll, sub = nA > 1 ? tr('tpsOf', { d: M.nDone, a: nA }) : finKind(t).k === 'tp' ? 'TP' : '';
-  return `<div class="tpb fz"><div class="trk"><div class="rk${hit ? ' hit' : ''}" style="width:${RED * 100}%"></div><div class="pgs">${segs}</div>
-    ${wd > 0.002 ? `<div class="trav ${k}" style="left:${(a * 100).toFixed(2)}%;width:${(wd * 100).toFixed(2)}%"></div>` : ''}
-    <div class="txl"><span class="t-rk" style="width:${RED * 100}%">${redTx}</span><div class="txg">${txs}</div></div>
-    <i class="en" style="left:${RED * 100}%"></i><i class="fxm ${k}" style="left:${(ex * 100).toFixed(1)}%"><b>${M.exitWin ? '✓' : '✕'}</b></i></div>
-    ${labels(t, M.sl, RED, M.lastPx != null ? fmtPrice(M.lastPx) : '—', sub)}</div>`;
+  // régua congelada no ponto de saída (mesmo visual das posições abertas)
+  const RED = 0.3, posAt = finPosAt(t, M, RED), res = finResult(t);
+  const dots = M.segs.length > 1 ? M.segs.map((g) => ({ x: posAt(g.px), done: g.done })) : [];
+  const won = M.segs.filter((g) => g.done).reduce((a, g) => a + g.net, 0);
+  const lT = fmtPrice(M.sl), rT = M.lastPx != null ? fmtPrice(M.lastPx) : '—';
+  return ruler({ k: RED, pos: posAt(M.exitPx), dots, chip: { t: usd(res), up: res >= 0 }, cls: 'rg-fz', tw: rgTw(lT, rT),
+    left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'lg' },
+    bot: { l: { t: M.lossNet != null && M.lossNet < 0 ? '✕ ' + num(M.lossNet) : num(M.risk), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: M.nDone ? '✓ ' + num(won) : '', cls: 'lg', sub: M.nAll > 1 ? tr('tpsOf', { d: M.nDone, a: M.nAll }) : '' } } });
 }
 function detail(t, p, L) {
   const mg = t.margin;
