@@ -278,3 +278,20 @@ html[data-theme=light] .rg-p, html[data-theme=light] .rg-d:not(.dn):not(.ls) { b
 html[data-theme=light] .rg-ch.up { background: #e3f6f2; } html[data-theme=light] .rg-ch.dn { background: #fde8ec; }
 html[data-theme=light] .rg-b .rb-m { background: none; color: var(--txt); }
 html[data-theme=light] .rg-en { background: var(--txt); }
+
+.tot b.lkc { color: #e8c46a; } html[data-theme=light] .tot b.lkc { color: #9a7412; }
+
+/* ordens abertas: pílula de bolinhas (cada bolinha = uma ordem, na ordem da barra) + lista ao tocar */
+.opill { flex: none; display: inline-flex; align-items: center; gap: 3px; border: 1px solid var(--line); background: none; border-radius: 9px; padding: 2px 6px; align-self: center; cursor: pointer; }
+.opill.on { border-color: var(--mut); }
+.opill i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; box-sizing: border-box; }
+.opill i.sl { background: var(--red); } .opill i.tp { background: var(--teal); }
+.opill i.dl { border: 1px dashed; background: none; } .opill i.dl.b { border-color: var(--teal); } .opill i.dl.s { border-color: var(--red); }
+.opill em { font-style: normal; color: var(--mut); font-size: 10px; margin-left: 2px; }
+.olist { display: flex; flex-direction: column; gap: 3px; border-top: 1px dashed var(--line); padding-top: 5px; }
+.orow { display: grid; grid-template-columns: 84px 1fr auto; align-items: center; font-size: 12px; }
+.orow b { font: 600 12px var(--mono); color: var(--txt); } .orow > span:last-child { color: var(--mut); font: 11px var(--mono); }
+.otag { justify-self: start; font: 600 11px var(--mono); border: 1px solid; border-radius: 10px; padding: 0 7px; line-height: 18px; white-space: nowrap; }
+.otag.sl { color: var(--red); border-color: color-mix(in srgb, var(--red) 55%, transparent); }
+.otag.tp { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 55%, transparent); }
+.otag.dl { border-style: dashed; } .otag.dl.b { color: var(--teal); background: color-mix(in srgb, var(--teal) 8%, transparent); } .otag.dl.s { color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }

@@ -9,7 +9,7 @@ import { extStore, bestWorst } from './lib/runext.js';
 import { ruler } from './lib/ruler.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.24';
+const VERSION = '1.0.25';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -28,7 +28,7 @@ function applyTheme(m) {
 }
 applyTheme(ls.get('theme') || 'dark');
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme(ls.get('theme') || 'dark'));
-const S = { fin: ls.get('fin') || (() => { const f = { since: Date.now() - 86400e3, hidden: [] }; ls.set('fin', f); return f; })(), addr: ls.get('addr'), meta: ls.get('meta', {}), metaAt: ls.get('metaAt'), tab: 'pos', sort: ls.get('sort', { k: 'pnl', d: 1 }), open: new Set(), data: null, err: null, loading: false, at: 0, histDays: 30 };
+const S = { fin: ls.get('fin') || (() => { const f = { since: Date.now() - 86400e3, hidden: [] }; ls.set('fin', f); return f; })(), addr: ls.get('addr'), meta: ls.get('meta', {}), metaAt: ls.get('metaAt'), tab: 'pos', sort: ls.get('sort', { k: 'pnl', d: 1 }), open: new Set(), ords: new Set(), data: null, err: null, loading: false, at: 0, histDays: 30 };
 
 // ---------- formatos ----------
 const br = (v, d = 2) => (v == null || !isFinite(v) ? '—' : Math.abs(v).toLocaleString(loc(), { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -283,12 +283,35 @@ function r1Txt(t, p) {
   const d = s * (t.entry + s * Math.abs(t.entry - t.sl) - p) / p;
   return d > 0 ? tr('to1r', { p: fmt1(d * 100) + '%' }) : tr('past1r');
 }
+// Ordens abertas do ativo, na mesma ordem da barra (SL à esquerda, TP à direita, limites pelo preço)
+function ordsOf(t) {
+  const c = coin(t), sg = t.dir === 'baixa' ? -1 : 1;
+  return (S.data?.orders || []).filter((o) => o.coin === c).map((o) => {
+    const px = o.trig || o.px, ty = String(o.type || '');
+    const k = /take profit/i.test(ty) ? 'tp' : /stop/i.test(ty) ? 'sl' : 'lim';
+    return { k, px, sz: o.sz, buy: o.side === 'B', reduce: o.reduce || o.tpsl };
+  }).sort((a, b) => sg * (a.px - b.px));
+}
+function ordPill(t, os) {
+  if (!os.length) return '';
+  const on = S.ords.has(t.id);
+  const dots = os.map((o) => `<i class="${o.k === 'lim' ? 'dl ' + (o.buy ? 'b' : 's') : o.k}"></i>`).join('');
+  return `<button type="button" class="opill${on ? ' on' : ''}" data-ords="${esc(t.id)}" aria-label="${os.length}">${dots}<em>${on ? '▾' : '▸'}</em></button>`;
+}
+function ordList(os) {
+  return `<div class="olist">${os.map((o) => {
+    const tag = o.k === 'lim' ? `<span class="otag dl ${o.buy ? 'b' : 's'}">${o.buy ? '▲ ' + tr('buy').toLowerCase() : '▼ ' + tr('sell').toLowerCase()}</span>` : `<span class="otag ${o.k}">${o.k.toUpperCase()}</span>`;
+    const q = o.sz ? (o.k === 'lim' && !o.reduce ? '+' : '') + qty(o.sz) : tr('wholePos');
+    return `<div class="orow">${tag}<b>${fmtPrice(o.px)}</b><span>${q}</span></div>`;
+  }).join('')}</div>`;
+}
 function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   const hk = S.sort.k;
   const pc = (v) => (v > 1 ? '> 100' : String(Math.round(Math.max(0, v) * 100))) + '%';
   // no lucro (0% do caminho) mostra também a distância do preço, para o desempate ficar visível
   const dd = (v, d) => (v <= 0 && d != null ? ` <small>· ${tr('away', { p: fmt1(d * 100) + '%' })}</small>` : '');
-  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : 'neg'}">${slP != null ? (t.sl && (t.dir === 'baixa' ? -1 : 1) * (t.sl - t.entry) > 0 && L.ifSl != null ? `<b class="lkt">${tr('locked', { v: num(L.ifSl), p: pc(slP) })}</b>` : tr('distSl', { p: pc(slP) }) + dd(slP, slD)) : tr('noSl')}</span><span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) + dd(tpP, tpD) : r1Txt(t, p)}</span></div>`;
+  const os = ordsOf(t);
+  const dist = `<div class="dst"><span class="${hk === 'nsl' ? 'neg on' : 'neg'}">${slP != null ? (t.sl && (t.dir === 'baixa' ? -1 : 1) * (t.sl - t.entry) > 0 && L.ifSl != null ? `<b class="lkt">${tr('locked', { v: num(L.ifSl), p: pc(slP) })}</b>` : tr('distSl', { p: pc(slP) }) + dd(slP, slD)) : tr('noSl')}</span>${ordPill(t, os)}<span class="${hk === 'ntp' ? 'pos on' : ''}">${tpP != null ? tr('distTp', { n: tpN ? 'TP' + tpN : 'TP', p: pc(tpP) }) + dd(tpP, tpD) : r1Txt(t, p)}</span></div>`;
   const rrv = L.rr == null ? '' : `<div class="dst rrl"><span></span><span class="${hk === 'rr' ? 'on' : ''}">R/R <b>${L.rr === Infinity ? tr('noRisk') : fmt1(L.rr)}</b></span></div>`;
   const side = t.dir === 'baixa' ? 'sh' : 'lg', op = S.open.has(t.id);
   const partial = t.parts?.length;
@@ -297,7 +320,7 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
     <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}${hk === 'open' && t.openedAt ? `<span class="lev">· ${dur(Date.now() - t.openedAt)}</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
     ${bar(t, p, pl, roe, L)}
-    ${dist}${rrv}
+    ${dist}${S.ords.has(t.id) && os.length ? ordList(os) : ''}${rrv}
     <div class="fg">${cell(tr('mark'), p ? fmtPrice(p) : '—', 'wht')}${cell(tr('liq'), liqTx, isFinite(liqD) && liqD < 0.1 ? 'warn' : '')}${cell(tr('margin'), t.margin ? usd(t.margin, false) : '—')}${cell(tr('size'), `${qty(t.qty)}${partial ? `<small>/${qty(origQty(t))}</small>` : ''}`)}</div>
     ${op ? detail(t, p, L) : ''}</article>`;
 }
@@ -390,6 +413,7 @@ function bind() {
   document.querySelectorAll('[data-days]').forEach((b) => (b.onclick = () => { S.histDays = +b.dataset.days; render(); }));
   document.querySelectorAll('[data-fin-x]').forEach((b) => (b.onclick = () => { S.fin = { ...S.fin, hidden: [...(S.fin.hidden || []), b.dataset.finX].slice(-500) }; ls.set('fin', S.fin); render(); }));
   const fa = $('[data-fin=all]'); if (fa) fa.onclick = () => { S.fin = { since: Date.now(), hidden: [] }; ls.set('fin', S.fin); render(); };
+  document.querySelectorAll('[data-ords]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.ords; S.ords.has(id) ? S.ords.delete(id) : S.ords.add(id); render(); }));
   document.querySelectorAll('article.pc').forEach((a) => (a.onclick = () => { const id = a.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); render(); }));
   const out = $('#out'); if (out) out.onclick = () => { if (!confirm(tr('confirmOut'))) return; S.addr = null; S.data = null; ls.del('addr'); render(); };
   const clr = $('#clrm'); if (clr) clr.onclick = () => { S.meta = {}; S.metaAt = null; ls.del('meta'); ls.del('metaAt'); render(); };
