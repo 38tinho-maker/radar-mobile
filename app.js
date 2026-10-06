@@ -5,11 +5,11 @@ import { slimFill, slimFund, slimOrder, buildTrades } from './lib/hltrades.js';
 import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice, setPriceLocale } from './lib/format.js';
 import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/i18n.js';
-import { extStore, bestWorst } from './lib/runext.js';
+import { extStore, bestWorst, trackSl, sinceSl } from './lib/runext.js';
 import { ruler } from './lib/ruler.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.25';
+const VERSION = '1.0.26';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -76,12 +76,17 @@ async function load() {
     S.err = null; S.at = Date.now();
     // máxima e mínima desde a entrada (candles da Hyperliquid), em segundo plano
     EXT.refresh(trades.filter((t) => t.status === 'open' && t.openedAt).map((t) => ({ id: t.id, coin: coin(t), since: t.openedAt })), () => { if (S.tab === 'pos') render(); });
+    // mexeu no SL: a faixa da barra recomeça daquele momento
+    ls.set('slm', trackSl(ls.get('slm', {}), trades));
+    EXTSL.refresh(trades.filter((t) => t.status === 'open' && t.slAt).map((t) => ({ id: t.id, coin: coin(t), since: t.slAt })), () => { if (S.tab === 'pos') render(); });
   } catch (e) {
     S.err = e?.code === 'invalid' ? 'err.notfound' : 'err.net';
   } finally { S.loading = false; render(); }
 }
 const EXT = extStore({ load: async () => ls.get('ext', {}), save: async (m) => ls.set('ext', m) });
 EXT.init();
+const EXTSL = extStore({ load: async () => ls.get('extsl', {}), save: async (m) => ls.set('extsl', m) });
+EXTSL.init();
 const withMeta = (t) => { const m = S.meta[t.id] || {}; return { ...t, patternName: m.patternName || null, tf: m.tf || null, linkSrc: m.patternName ? (m.auto ? m.src : m.src || 'manual') : null }; };
 
 // ---------- barra TP/SL (igual à Carteira) ----------
@@ -124,7 +129,7 @@ function lockBar(t, p, pl, L, sl, far) {
   const bw = bestWorst(EXT.get(t.id), t, p);
   const locked = L.ifSl, more = L.ifAll != null && locked != null ? L.ifAll - locked : null;
   const lT = fmtPrice(t.entry), rT = fmtPrice(far);
-  return ruler({ k, pos: p ? at(p) : null, cap: bw?.best != null ? { a: k, b: at(bw.best) } : null, chip: chipOf(pl), mode: 'lk', tw: rgTw(lT, rT),
+  return ruler({ k, pos: p ? at(p) : null, cap: t.slAt ? capSl(t, p, at) : bw?.best != null ? { a: k, b: at(bw.best) } : null, chip: chipOf(pl), mode: 'lk', tw: rgTw(lT, rT),
     left: { t: lT, cls: 'en' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: locked != null ? '🔒 ' + num(locked) : '', cls: 'lk' }, m: { t: 'SL ' + fmtPrice(sl), cls: 'lk' }, r: { t: num(more), cls: 'lg' } } });
 }
@@ -140,7 +145,13 @@ function noTpBar(t, p, pl, L, sl) {
 }
 // ----- régua (B2·2·2), igual à Carteira -----
 const rgTw = (l, r) => W() - (l.length + r.length) * 6.8 - 40;
-function capOf(t, p, posAt) { const bw = bestWorst(EXT.get(t.id), t, p); return bw ? { a: bw.worst != null ? posAt(bw.worst) : null, b: bw.best != null ? posAt(bw.best) : null } : null; }
+// faixa desde que o SL mudou: vermelho = quanto voltou em direção ao SL, verde = quanto foi a favor
+function capSl(t, p, at) {
+  if (!t.slAt || p == null) return null;
+  const e = EXTSL.get(t.id), r = sinceSl(e && e.since === t.slAt ? e : null, t, p);
+  return r ? { a: at(r.adv), b: at(r.fav), at: at(p) } : null;
+}
+function capOf(t, p, posAt) { if (t.slAt) return capSl(t, p, posAt); const bw = bestWorst(EXT.get(t.id), t, p); return bw ? { a: bw.worst != null ? posAt(bw.worst) : null, b: bw.best != null ? posAt(bw.best) : null } : null; }
 const chipOf = (pl) => (pl != null && isFinite(pl) ? { t: usd(pl), up: pl >= 0 } : null);
 function bar(t, p, pl, roe, L) {
   const sl = t.sl, s = t.dir === 'baixa' ? -1 : 1;
