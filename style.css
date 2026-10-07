@@ -336,3 +336,13 @@ html[data-theme=light] .tsc { color: #8a6510; } html[data-theme=light] .tsm { co
 .tban .muted { color: var(--mut); font-size: 11.5px; }
 .tbl { background: none; border: 0; padding: 0 6px 0 0; color: #e8c46a; text-decoration: underline; font: 12px var(--mono); cursor: pointer; }
 html[data-theme=light] .tbl { color: #8a6510; }
+/* limites além do SL: etiquetas antes do retângulo do SL + aviso */
+.rg-lw { display: inline-flex; align-items: center; gap: 2px; }
+.rg-lw > .rg-e { margin-left: 2px; }
+.rg-ox { font: 600 10px var(--mono); border: 1px dashed; border-radius: 9px; padding: 0 4px; line-height: 15px; white-space: nowrap; }
+.rg-ox.buy { color: var(--teal); border-color: rgba(80,210,193,.6); } .rg-ox.sell { color: var(--red); border-color: rgba(237,112,136,.6); }
+.rg-lw.st-gh { visibility: hidden; }
+.st-w { margin: 6px 0 4px; font-size: 11.5px; color: var(--org); background: rgba(240,163,94,.08); border: 1px solid rgba(240,163,94,.35); border-radius: 8px; padding: 6px 8px; line-height: 1.45; }
+.st-al { margin: 6px 0 0 4px; font: 11px var(--mono); line-height: 1.8; }
+.st-a .c-sh { color: var(--red); } .st-al .muted { color: var(--mut); }
+.rg-ts.at { top: -1px; width: 18px; height: 18px; margin-left: -9px; background: transparent; border: 2px solid #e8c46a; box-sizing: border-box; box-shadow: 0 0 6px rgba(232,196,106,.6); }

@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.30';
+const VERSION = '1.0.31';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -159,7 +159,8 @@ const trailSt = (t, p) => trailState(trailOf(t, p), trailMin());
 const tArrow = (t) => (t.dir === 'baixa' ? '↓' : '↑');
 function trailX(t, p, at) {
   const r = trailOf(t, p), st = trailState(r, trailMin());
-  if (!st || st === 'none' || st === 'at') return null;
+  if (!st || st === 'none') return null;
+  if (st === 'at') return { x: at(t.sl ?? r.sug), kind: 'at' }; // anel dourado em volta do traço do SL
   return { x: at(r.sug), from: t.sl != null ? at(t.sl) : null, kind: st };
 }
 function trailLine(t, p) {
