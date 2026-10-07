@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.32';
+const VERSION = '1.0.33';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -131,7 +131,7 @@ function lockBar(t, p, pl, L, sl, far) {
   const bw = bestWorst(EXT.get(t.id), t, p);
   const locked = L.ifSl, more = L.ifAll != null && locked != null ? L.ifAll - locked : null;
   const lT = fmtPrice(t.entry), rT = fmtPrice(far);
-  return ruler({ k, pos: p ? at(p) : null, cap: t.slAt ? capSl(t, p, at) : bw?.best != null ? { a: k, b: at(bw.best) } : null, lims: stepsOf(t, p, at, lT, rT, L), out: STEPS.get('out|' + t.id), trail: trailX(t, p, at), chip: chipOf(pl), mode: 'lk', tw: rgTw(lT, rT),
+  return ruler({ k, pos: p ? at(p) : null, cap: t.slAt ? capSl(t, p, at) : bw?.best != null ? { a: k, b: at(bw.best) } : null, lims: stepsOf(t, p, at, lT, rT, L), trail: trailX(t, p, at, t.entry), out: outOf(t), chip: chipOf(pl), mode: 'lk', tw: rgTw(lT, rT),
     left: { t: lT, cls: 'en' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: locked != null ? '🔒 ' + num(locked) : '', cls: 'lk' }, m: { t: 'SL ' + fmtPrice(sl), cls: 'lk' }, r: { t: num(more), cls: 'lg' } } });
 }
@@ -150,26 +150,35 @@ async function calcTrail(t, p) {
   let r = null;
   try {
     const cs = (await hlKlines(coin(t), '1h', 300)).filter((k) => k.ct < Date.now());
-    r = trailSuggest(cs, '1h', { dir: t.dir, entry: t.entry, qty: restQty(t), sl }, p, S.data?.rate || 0.00045);
+    r = trailSuggest(cs, '1h', { dir: t.dir, entry: t.entry, qty: restQty(t), sl }, p, S.data?.rate || 0.00045, DEFAULT_TRAIL.mode);
   } catch { /* sem candles agora */ }
   TRAIL.set(t.id, { at: Date.now(), r, sl, busy: false });
   if (JSON.stringify(prev?.r || null) !== JSON.stringify(r) && !trailRender) trailRender = setTimeout(() => { trailRender = null; render(); }, 200);
 }
 const trailSt = (t, p) => trailState(trailOf(t, p), trailMin());
 const tArrow = (t) => (t.dir === 'baixa' ? '↓' : '↑');
-function trailX(t, p, at) {
+function trailX(t, p, at, lp = t.sl) {
   const r = trailOf(t, p), st = trailState(r, trailMin());
   if (!st || st === 'none') return null;
+  // regra além da ponta esquerda da barra: etiqueta tracejada dourada "◌ preço" antes do retângulo do SL
+  if (st !== 'at' && lp != null && (t.dir === 'baixa' ? -1 : 1) * (r.sug - lp) < 0) { STEPS.set('gold|' + t.id, { t: '◌ ' + fmtPrice(r.sug), cls: 'gold' }); return null; }
   if (st === 'at') return { x: at(t.sl ?? r.sug), kind: 'at' }; // anel dourado em volta do traço do SL
   return { x: at(r.sug), from: t.sl != null ? at(t.sl) : null, kind: st };
 }
+// etiquetas de fora da barra: limites além do SL (uma só, compacta) + regra do SL móvel (dourada)
+function outOf(t) {
+  const a = [...(STEPS.get('gold|' + t.id) ? [STEPS.get('gold|' + t.id)] : []), ...(STEPS.get('out|' + t.id) || [])];
+  if (a.length) STEPS.set('fin|' + t.id, a); else STEPS.delete('fin|' + t.id);
+  return a.length ? a : null;
+}
+const stepsHtml = (id) => { const o = STEPS.get(id); return o && o.rows ? steps({ ...o, out: STEPS.get('fin|' + id) || null }) : ''; };
 function trailLine(t, p) {
   const r = trailOf(t, p), st = trailState(r, trailMin()); if (!st) return '';
   const top = t.dir === 'baixa', piv = r.piv ? `${tr(top ? 'tTop' : 'tBot')} 1h ${fmtPrice(r.piv.p)}` : '';
   const html = {
-    on: () => `<button type="button" class="tsc" data-copy="${fmtPrice(r.sug)}">${r.v > 0 ? '🔒 ' : ''}SL ${tArrow(t)} ${fmtPrice(r.sug)}${r.more != null ? ` · ${num(r.more)}` : ''} <u>${tr('copy')}</u></button><span class="muted">${piv} ${top ? '+' : '−'} ¼ ATR</span>`,
+    on: () => `<button type="button" class="tsc" data-copy="${fmtPrice(r.sug)}">${r.v > 0 || r.be ? '🔒 ' : ''}SL ${tArrow(t)} ${fmtPrice(r.sug)}${r.be ? ` (${tr('entry')})` : ''}${r.more != null ? ` · ${num(r.more)}` : ''} <u>${tr('copy')}</u></button><span class="muted">${r.be ? tr('tBe') : `${piv} ${top ? '+' : '−'} ¼ ATR`}</span>`,
     small: () => `<span class="tsm">SL ${tArrow(t)} ${fmtPrice(r.sug)} · ${tr('only')} ${num(r.more)}</span><span class="muted">${tr('tSmall', { v: trailMin() })}</span>`,
-    at: () => `<span class="tok">✓ ${tr('tAt')} · ${fmtPrice(t.sl)}</span><span class="muted">${piv} ${top ? '+' : '−'} ¼ ATR</span>`,
+    at: () => `<span class="tok">✓ ${tr(r.be ? 'tAtBe' : 'tAt')} · ${fmtPrice(t.sl)}</span><span class="muted">${r.be ? tr('tZero') : `${piv} ${top ? '+' : '−'} ¼ ATR`}</span>`,
     ok: () => `<span class="tok">✓ ${tr('tOk')}</span><span class="muted">${tr('tOkTx', { p: fmtPrice(r.sug) })}</span>`,
     none: () => `<span class="tnn">⏳ ${tr(top ? 'tWaitTop' : 'tWaitBot')}</span>`,
   }[st]();
@@ -202,7 +211,7 @@ function stepsOf(t, p, posAt, lT, rT, L) {
   const warn = nb ? tr(nb === 1 ? 'bWarn1' : 'bWarn', { n: nb, w: tr(short ? 'above' : 'below'), sl: fmtPrice(t.sl) }) : '';
   const after = P.beyond.map((x, i) => ({ a: `${i + 1}ª ${fmtPrice(x.px)}`, b: (i ? tr('bTot', { q: qty(x.qty), c, p: fmtPrice(x.avg) }) : tr(short ? 'bNewS' : 'bNewB', { q: qty(x.sz), c })) + ` <span class="muted">· ${tr('noSl')} · ${tr('noTp')}</span>` }));
   const label = [n ? tr(n === 1 ? 'stepsLab1' : 'stepsLab', { n }) : '', nb ? tr('bLab', { n: nb }) : ''].filter(Boolean).join(' · ');
-  STEPS.set(t.id, steps({ id: t.id, open: S.steps.has(t.id), lT, rT, out, label, rows, warn, after }));
+  STEPS.set(t.id, { id: t.id, open: S.steps.has(t.id), lT, rT, label, rows, warn, after }); // o HTML sai no fim do cartão (com as etiquetas finais)
   if (out) STEPS.set('out|' + t.id, out);
   return P.steps.map((x) => posAt(x.px));
 }
@@ -212,7 +221,7 @@ function noTpBar(t, p, pl, L, sl) {
   const posAt = (q) => { const d = s * (q - t.entry); return d <= 0 ? ent * (1 - Math.min(1, -d / risk)) : ent + (1 - ent) * Math.min(1, d / risk); };
   const slV = L.ifSl != null ? L.ifSl - L.realized : null, over = p && s * (p - r1) > 0;
   const lT = fmtPrice(sl), rT = '1R ' + fmtPrice(r1);
-  return ruler({ k: ent, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), out: STEPS.get('out|' + t.id), trail: trailX(t, p, posAt), chip: chipOf(pl), mode: 'nt', tw: rgTw(lT, rT),
+  return ruler({ k: ent, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), trail: trailX(t, p, posAt), out: outOf(t), chip: chipOf(pl), mode: 'nt', tw: rgTw(lT, rT),
     left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'mu' },
     bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: tr('noTp') + (over ? ' ▸' : ''), cls: 'mu' } } });
 }
@@ -259,7 +268,7 @@ function bar(t, p, pl, roe, L) {
   const tail = unc > 0.005 ? posAt(L.levels[nA - 1].px) : null;
   const rest = L.pend.reduce((a, x) => a + x.net, 0);
   const lT = fmtPrice(sl), rT = fmtPrice(last);
-  return ruler({ k: RED, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), out: STEPS.get('out|' + t.id), trail: trailX(t, p, posAt), dots, tail, chip: chipOf(pl), tw: rgTw(lT, rT),
+  return ruler({ k: RED, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), trail: trailX(t, p, posAt), out: outOf(t), dots, tail, chip: chipOf(pl), tw: rgTw(lT, rT),
     left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: L.pend.length ? num(rest) : '', cls: 'lg', sub: nA > 1 ? (nD ? tr('tpsOf', { d: nD, a: nA }) : tr('tps', { a: nA })) : '' } } });
 }
@@ -347,7 +356,7 @@ function posView() {
   const chip = (kk, l) => `<button class="chip${k === kk ? ' on' : ''}" data-sort="${kk}">${l}${k === kk ? (d > 0 ? ' ▲' : ' ▼') : ''}</button>`;
   return `<section class="tiles"><div class="tile"><span>${tr('tab.pos')}</span><b>${rows.length}</b></div><div class="tile"><span>${tr('acct')}</span><b>${usd(account.value, false)}</b></div><div class="tile"><span>${tr('openPnl')}</span><b class="${cls(tPl)}">${usd(tPl)}</b></div>
     ${marginBar(account)}
-    <div class="tot">${nSl ? `${tr('slLose')} <b class="neg">${num(tLose)}</b>${tLock > 0 ? ` · ${tr('slLock')} <b class="lkc">${num(tLock)}</b>` : ''}` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
+    <div class="tot">${nSl ? `${tr('slLose')} <b class="neg">${num(tLose)}</b>${tLock > 0 ? ` · ${tr('slLock')} <b class="lkc">${num(tLock)}</b> · ${tr('slNet')} <b class="${cls(tLose + tLock)}">${num(tLose + tLock)}</b>` : ''}` : ''}${nSl && nTp ? ' · ' : ''}${nTp ? `${tr('allTp')} <b class="pos">${num(tTp)}</b>` : ''}</div></section>
     <div class="sortw"><div class="sorts">${chip('nsl', tr('sort.nsl'))}${chip('ntp', tr('sort.ntp'))}${chip('rr', 'R/R')}${chip('open', tr('sort.open'))}${chip('pnl', 'PNL')}${['mkt', 'size', 'liq', 'margin', 'funding'].map((x) => chip(x, tr('sort.' + x))).join('')}</div></div>
     ${trailBanner(rows)}
     ${rows.length ? rows.map(card).join('') : `<div class="empty">${tr('noPos')}</div>`}
@@ -407,8 +416,8 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   const cell = (k, v, c = '') => `<div><span>${k}</span><b class="${c}">${v}</b></div>`;
   return `<article class="pc ${side}${op ? ' open' : ''}${trailSt(t, p) === 'on' ? ' tsg' : ''}" data-id="${esc(t.id)}">
     <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}${hk === 'open' && t.openedAt ? `<span class="lev">· ${dur(Date.now() - t.openedAt)}</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
-    ${(STEPS.delete(t.id), bar(t, p, pl, roe, L))}
-    ${dist}${trailLine(t, p)}${S.ords.has(t.id) && os.length ? ordList(os) : ''}${STEPS.get(t.id) || ''}${rrv}
+    ${(STEPS.delete(t.id), STEPS.delete('gold|' + t.id), bar(t, p, pl, roe, L))}
+    ${dist}${trailLine(t, p)}${S.ords.has(t.id) && os.length ? ordList(os) : ''}${stepsHtml(t.id)}${rrv}
     <div class="fg">${cell(tr('mark'), p ? fmtPrice(p) : '—', 'wht')}${cell(tr('liq'), liqTx, isFinite(liqD) && liqD < 0.1 ? 'warn' : '')}${cell(tr('margin'), t.margin ? usd(t.margin, false) : '—')}${cell(tr('size'), `${qty(t.qty)}${partial ? `<small>/${qty(origQty(t))}</small>` : ''}`)}</div>
     ${op ? detail(t, p, L) : ''}</article>`;
 }

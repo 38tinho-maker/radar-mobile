@@ -346,3 +346,4 @@ html[data-theme=light] .tbl { color: #8a6510; }
 .st-al { margin: 6px 0 0 4px; font: 11px var(--mono); line-height: 1.8; }
 .st-a .c-sh { color: var(--red); } .st-al .muted { color: var(--mut); }
 .rg-ts.at { top: -1px; width: 18px; height: 18px; margin-left: -9px; background: transparent; border: 2px solid #e8c46a; box-sizing: border-box; box-shadow: 0 0 6px rgba(232,196,106,.6); }
+.rg-ox.gold { color: #e8c46a; border-color: rgba(232,196,106,.7); }
