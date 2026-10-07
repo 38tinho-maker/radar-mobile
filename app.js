@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.31';
+const VERSION = '1.0.32';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -189,7 +189,9 @@ const STEPS = new Map();
 function stepsOf(t, p, posAt, lT, rT, L) {
   STEPS.delete(t.id); STEPS.delete('out|' + t.id);
   const P = pendingPlan({ coin: coin(t), orders: S.data?.orders || [], pos: { dir: t.dir, qty: restQty(t), entry: t.entry, sl: t.sl, tps: (L?.pend || []).map((x) => ({ px: x.px })) }, price: p, rate: S.data?.rate || 0.00045 });
-  if (!P?.steps?.length && !P?.beyond?.length) return [];
+  if (!P) return [];
+  P.steps ||= []; P.beyond ||= []; // lib antiga (arquivo não atualizado) não tem esses campos
+  if (!P.steps.length && !P.beyond.length) return [];
   const n = P.steps.length, nb = P.beyond.length, c = esc(coin(t)), short = t.dir === 'baixa';
   const rows = P.steps.map((x, i) => ({
     lab: tr(i ? 'stepN' : 'step1', { n: i + 1, p: fmtPrice(x.px) }), lim: posAt(x.px), avg: posAt(x.avg),
@@ -269,7 +271,10 @@ setInterval(() => { const el = $('#ref'); if (el && S.addr && !S.loading) el.inn
 function render() {
   const app = $('#app');
   if (!S.addr) { app.innerHTML = setupView(); bindSetup(); return; }
-  const body = S.tab === 'pos' ? posView() : S.tab === 'ord' ? ordView() : S.tab === 'hist' ? histView() : cfgView();
+  // se algo falhar ao montar a tela, mostra o erro em vez de ficar parado em "Carregando…"
+  let body;
+  try { body = S.tab === 'pos' ? posView() : S.tab === 'ord' ? ordView() : S.tab === 'hist' ? histView() : cfgView(); }
+  catch (e) { console.error('[Radar Mobile] render', e); body = `<div class="err">${esc(tr('renderErr', { v: VERSION }))}<br><small>${esc(String(e?.message || e))}</small></div>`; }
   app.innerHTML = `<header><b>${S.tab === 'pos' ? 'Radar Mobile' : tr('tab.' + S.tab)}</b><button id="ref" class="upd">${updTxt()}</button></header>
     ${S.err ? `<div class="err">${esc(tr(S.err))}</div>` : ''}
     <main id="main">${body}</main>

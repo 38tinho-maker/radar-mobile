@@ -7,7 +7,7 @@ Página para ver suas posições da Hyperliquid no celular. **Somente leitura**:
 1. Crie uma conta em **github.com** (se ainda não tiver).
 2. Clique em **+ → New repository**. Nome: `radar-mobile`. Marque **Public**. Clique em **Create repository**.
 3. Na página do repositório, clique em **uploading an existing file** (ou **Add file → Upload files**).
-4. Arraste **todo o conteúdo desta pasta** (index.html, app.js, style.css, sw.js, manifest.webmanifest e as pastas `lib` e `icons`). Clique em **Commit changes**.
+4. Clique em **choose your files**, selecione **todos os 12 arquivos** desta pasta (Ctrl+A) e clique em **Abrir**. Não há subpastas. Clique em **Commit changes**.
 5. Vá em **Settings → Pages**. Em *Branch*, escolha **main** e **/ (root)**. Clique em **Save**.
 6. Espere 1–2 minutos. O endereço aparece no topo da página de Settings → Pages, algo como `https://SEU-USUARIO.github.io/radar-mobile/`.
 
