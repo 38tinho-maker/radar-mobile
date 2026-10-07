@@ -295,3 +295,22 @@ html[data-theme=light] .rg-en { background: var(--txt); }
 .otag.sl { color: var(--red); border-color: color-mix(in srgb, var(--red) 55%, transparent); }
 .otag.tp { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 55%, transparent); }
 .otag.dl { border-style: dashed; } .otag.dl.b { color: var(--teal); background: color-mix(in srgb, var(--teal) 8%, transparent); } .otag.dl.s { color: var(--red); background: color-mix(in srgb, var(--red) 8%, transparent); }
+/* barra ligada aos retângulos (sem espaço) + degraus "se executar" */
+.rg { column-gap: 0; }
+.rg > .rg-e:first-child { border-radius: 9px 3px 3px 9px; } .rg > .rg-e:nth-child(3) { border-radius: 3px 9px 9px 3px; }
+.rg-r { border-radius: 0; } .rg-g { border-radius: 0; }
+.rg-od { position: absolute; top: 2px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; border: 2px dashed var(--red); background: var(--pan); box-sizing: border-box; z-index: 2; }
+.st { margin-top: 6px; }
+.st-tg { font: 12px var(--sans); background: none; border: 1px solid var(--line); border-radius: 12px; color: #e8c46a; padding: 3px 10px; cursor: pointer; }
+.st-tg.on { border-color: var(--mut); }
+html[data-theme=light] .st-tg, html[data-theme=light] .st-l { color: #a77b12; }
+.st-l { font-size: 11px; color: #e8c46a; margin: 8px 0 0 4px; }
+.rg.st-r { padding-top: 3px; }
+.st-gh { visibility: hidden; }
+.st-r .rg-t { height: 12px; }
+.st-dr, .st-dg { position: absolute; top: 5px; height: 0; border-top: 2px dashed; }
+.st-dr { left: 0; border-color: var(--red); } .st-dg { border-color: var(--teal); }
+.st-av { position: absolute; top: 0; width: 2px; height: 12px; margin-left: -1px; background: #e8c46a; z-index: 3; }
+.st-lm { position: absolute; top: 1px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 2px dashed var(--red); background: var(--pan); box-sizing: border-box; z-index: 2; }
+.st-b { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 6px; font: 10.5px var(--mono); color: var(--head); margin: 3px 0 0; white-space: nowrap; }
+.st-b .c-sh { color: var(--red); } .st-b .c-lg { color: var(--teal); }

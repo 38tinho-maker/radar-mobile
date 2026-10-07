@@ -6,10 +6,11 @@ import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice, setPriceLocale } from './lib/format.js';
 import { t as tr, setLang, lang, loc, month, patName, defaultLang } from './lib/i18n.js';
 import { extStore, bestWorst, trackSl, sinceSl } from './lib/runext.js';
-import { ruler } from './lib/ruler.js';
+import { ruler, steps } from './lib/ruler.js';
+import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.26';
+const VERSION = '1.0.27';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -28,7 +29,7 @@ function applyTheme(m) {
 }
 applyTheme(ls.get('theme') || 'dark');
 matchMedia('(prefers-color-scheme: light)').addEventListener?.('change', () => applyTheme(ls.get('theme') || 'dark'));
-const S = { fin: ls.get('fin') || (() => { const f = { since: Date.now() - 86400e3, hidden: [] }; ls.set('fin', f); return f; })(), addr: ls.get('addr'), meta: ls.get('meta', {}), metaAt: ls.get('metaAt'), tab: 'pos', sort: ls.get('sort', { k: 'pnl', d: 1 }), open: new Set(), ords: new Set(), data: null, err: null, loading: false, at: 0, histDays: 30 };
+const S = { fin: ls.get('fin') || (() => { const f = { since: Date.now() - 86400e3, hidden: [] }; ls.set('fin', f); return f; })(), addr: ls.get('addr'), meta: ls.get('meta', {}), metaAt: ls.get('metaAt'), tab: 'pos', sort: ls.get('sort', { k: 'pnl', d: 1 }), open: new Set(), ords: new Set(), steps: new Set(), data: null, err: null, loading: false, at: 0, histDays: 30 };
 
 // ---------- formatos ----------
 const br = (v, d = 2) => (v == null || !isFinite(v) ? '—' : Math.abs(v).toLocaleString(loc(), { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -133,13 +134,28 @@ function lockBar(t, p, pl, L, sl, far) {
     left: { t: lT, cls: 'en' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: locked != null ? '🔒 ' + num(locked) : '', cls: 'lk' }, m: { t: 'SL ' + fmtPrice(sl), cls: 'lk' }, r: { t: num(more), cls: 'lg' } } });
 }
+// degraus "se executar": limites de aumento (bolinha tracejada na barra) e, ao abrir, o novo médio, o risco e o ganho de cada uma
+const STEPS = new Map();
+function stepsOf(t, p, posAt, lT, rT, L) {
+  STEPS.delete(t.id);
+  const P = pendingPlan({ coin: coin(t), orders: S.data?.orders || [], pos: { dir: t.dir, qty: restQty(t), entry: t.entry, sl: t.sl, tps: (L?.pend || []).map((x) => ({ px: x.px })) }, price: p, rate: S.data?.rate || 0.00045 });
+  if (!P?.steps?.length) return [];
+  const n = P.steps.length;
+  const rows = P.steps.map((x, i) => ({
+    lab: tr(i ? 'stepN' : 'step1', { n: i + 1, p: fmtPrice(x.px) }), lim: posAt(x.px), avg: posAt(x.avg),
+    l: { t: x.risk == null ? '' : (x.risk > 0 ? '' : '🔒 ') + num(-x.risk) },
+    m: { t: `${tr('avg')} ${fmtPrice(x.avg)} · ${qty(x.qty)}` }, r: { t: x.gain != null ? num(x.gain) : '' },
+  }));
+  STEPS.set(t.id, steps({ id: t.id, open: S.steps.has(t.id), lT, rT, label: tr(n === 1 ? 'stepsLab1' : 'stepsLab', { n }), rows }));
+  return P.steps.map((x) => posAt(x.px));
+}
 // sem TP (opção A): vermelho até o SL; lado do lucro listrado "sem TP" com o mesmo tamanho do risco (1R)
 function noTpBar(t, p, pl, L, sl) {
   const s = t.dir === 'baixa' ? -1 : 1, risk = Math.abs(t.entry - sl), r1 = t.entry + s * risk, ent = 0.5;
   const posAt = (q) => { const d = s * (q - t.entry); return d <= 0 ? ent * (1 - Math.min(1, -d / risk)) : ent + (1 - ent) * Math.min(1, d / risk); };
   const slV = L.ifSl != null ? L.ifSl - L.realized : null, over = p && s * (p - r1) > 0;
   const lT = fmtPrice(sl), rT = '1R ' + fmtPrice(r1);
-  return ruler({ k: ent, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), chip: chipOf(pl), mode: 'nt', tw: rgTw(lT, rT),
+  return ruler({ k: ent, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), chip: chipOf(pl), mode: 'nt', tw: rgTw(lT, rT),
     left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'mu' },
     bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: tr('noTp') + (over ? ' ▸' : ''), cls: 'mu' } } });
 }
@@ -186,7 +202,7 @@ function bar(t, p, pl, roe, L) {
   const tail = unc > 0.005 ? posAt(L.levels[nA - 1].px) : null;
   const rest = L.pend.reduce((a, x) => a + x.net, 0);
   const lT = fmtPrice(sl), rT = fmtPrice(last);
-  return ruler({ k: RED, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), dots, tail, chip: chipOf(pl), tw: rgTw(lT, rT),
+  return ruler({ k: RED, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), dots, tail, chip: chipOf(pl), tw: rgTw(lT, rT),
     left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: L.pend.length ? num(rest) : '', cls: 'lg', sub: nA > 1 ? (nD ? tr('tpsOf', { d: nD, a: nA }) : tr('tps', { a: nA })) : '' } } });
 }
@@ -330,8 +346,8 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
   const cell = (k, v, c = '') => `<div><span>${k}</span><b class="${c}">${v}</b></div>`;
   return `<article class="pc ${side}${op ? ' open' : ''}" data-id="${esc(t.id)}">
     <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}${hk === 'open' && t.openedAt ? `<span class="lev">· ${dur(Date.now() - t.openedAt)}</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
-    ${bar(t, p, pl, roe, L)}
-    ${dist}${S.ords.has(t.id) && os.length ? ordList(os) : ''}${rrv}
+    ${(STEPS.delete(t.id), bar(t, p, pl, roe, L))}
+    ${dist}${S.ords.has(t.id) && os.length ? ordList(os) : ''}${STEPS.get(t.id) || ''}${rrv}
     <div class="fg">${cell(tr('mark'), p ? fmtPrice(p) : '—', 'wht')}${cell(tr('liq'), liqTx, isFinite(liqD) && liqD < 0.1 ? 'warn' : '')}${cell(tr('margin'), t.margin ? usd(t.margin, false) : '—')}${cell(tr('size'), `${qty(t.qty)}${partial ? `<small>/${qty(origQty(t))}</small>` : ''}`)}</div>
     ${op ? detail(t, p, L) : ''}</article>`;
 }
@@ -424,6 +440,7 @@ function bind() {
   document.querySelectorAll('[data-days]').forEach((b) => (b.onclick = () => { S.histDays = +b.dataset.days; render(); }));
   document.querySelectorAll('[data-fin-x]').forEach((b) => (b.onclick = () => { S.fin = { ...S.fin, hidden: [...(S.fin.hidden || []), b.dataset.finX].slice(-500) }; ls.set('fin', S.fin); render(); }));
   const fa = $('[data-fin=all]'); if (fa) fa.onclick = () => { S.fin = { since: Date.now(), hidden: [] }; ls.set('fin', S.fin); render(); };
+  document.querySelectorAll('[data-steps]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.steps; S.steps.has(id) ? S.steps.delete(id) : S.steps.add(id); render(); }));
   document.querySelectorAll('[data-ords]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.ords; S.ords.has(id) ? S.ords.delete(id) : S.ords.add(id); render(); }));
   document.querySelectorAll('article.pc').forEach((a) => (a.onclick = () => { const id = a.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); render(); }));
   const out = $('#out'); if (out) out.onclick = () => { if (!confirm(tr('confirmOut'))) return; S.addr = null; S.data = null; ls.del('addr'); render(); };
