@@ -1,6 +1,6 @@
 // Guarda os arquivos da página para abrir rápido; os dados da conta vêm sempre da Hyperliquid (nunca do cache).
-const CACHE = 'radar-mobile-v28';
-const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'lib/hyperliquid.js', 'lib/hltrades.js', 'lib/partials.js', 'lib/runext.js', 'lib/i18n.js', 'lib/finished.js', 'lib/ruler.js', 'lib/pending.js', 'lib/format.js', 'icons/icon-192.png'];
+const CACHE = 'radar-mobile-v29';
+const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'lib/hyperliquid.js', 'lib/hltrades.js', 'lib/partials.js', 'lib/runext.js', 'lib/i18n.js', 'lib/finished.js', 'lib/ruler.js', 'lib/pending.js', 'lib/trailsl.js', 'lib/format.js', 'icons/icon-192.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {
