@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.28';
+const VERSION = '1.0.30';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -131,7 +131,7 @@ function lockBar(t, p, pl, L, sl, far) {
   const bw = bestWorst(EXT.get(t.id), t, p);
   const locked = L.ifSl, more = L.ifAll != null && locked != null ? L.ifAll - locked : null;
   const lT = fmtPrice(t.entry), rT = fmtPrice(far);
-  return ruler({ k, pos: p ? at(p) : null, cap: t.slAt ? capSl(t, p, at) : bw?.best != null ? { a: k, b: at(bw.best) } : null, trail: trailX(t, p, at), chip: chipOf(pl), mode: 'lk', tw: rgTw(lT, rT),
+  return ruler({ k, pos: p ? at(p) : null, cap: t.slAt ? capSl(t, p, at) : bw?.best != null ? { a: k, b: at(bw.best) } : null, lims: stepsOf(t, p, at, lT, rT, L), out: STEPS.get('out|' + t.id), trail: trailX(t, p, at), chip: chipOf(pl), mode: 'lk', tw: rgTw(lT, rT),
     left: { t: lT, cls: 'en' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: locked != null ? '🔒 ' + num(locked) : '', cls: 'lk' }, m: { t: 'SL ' + fmtPrice(sl), cls: 'lk' }, r: { t: num(more), cls: 'lg' } } });
 }
@@ -159,7 +159,7 @@ const trailSt = (t, p) => trailState(trailOf(t, p), trailMin());
 const tArrow = (t) => (t.dir === 'baixa' ? '↓' : '↑');
 function trailX(t, p, at) {
   const r = trailOf(t, p), st = trailState(r, trailMin());
-  if (!st || st === 'none') return null;
+  if (!st || st === 'none' || st === 'at') return null;
   return { x: at(r.sug), from: t.sl != null ? at(t.sl) : null, kind: st };
 }
 function trailLine(t, p) {
@@ -168,6 +168,7 @@ function trailLine(t, p) {
   const html = {
     on: () => `<button type="button" class="tsc" data-copy="${fmtPrice(r.sug)}">${r.v > 0 ? '🔒 ' : ''}SL ${tArrow(t)} ${fmtPrice(r.sug)}${r.more != null ? ` · ${num(r.more)}` : ''} <u>${tr('copy')}</u></button><span class="muted">${piv} ${top ? '+' : '−'} ¼ ATR</span>`,
     small: () => `<span class="tsm">SL ${tArrow(t)} ${fmtPrice(r.sug)} · ${tr('only')} ${num(r.more)}</span><span class="muted">${tr('tSmall', { v: trailMin() })}</span>`,
+    at: () => `<span class="tok">✓ ${tr('tAt')} · ${fmtPrice(t.sl)}</span><span class="muted">${piv} ${top ? '+' : '−'} ¼ ATR</span>`,
     ok: () => `<span class="tok">✓ ${tr('tOk')}</span><span class="muted">${tr('tOkTx', { p: fmtPrice(r.sug) })}</span>`,
     none: () => `<span class="tnn">⏳ ${tr(top ? 'tWaitTop' : 'tWaitBot')}</span>`,
   }[st]();
@@ -178,23 +179,28 @@ function trailBanner(rows) {
   if (!st.length) return '';
   const on = st.filter((x) => x[2] === 'on'), n = (k) => st.filter((x) => x[2] === k).length;
   const more = on.reduce((a, [t, p]) => a + (trailOf(t, p).more || 0), 0);
-  const rest = [n('small') && tr('tnSmall', { n: n('small') }), n('ok') && tr('tnOk', { n: n('ok') }), n('none') && tr('tnWait', { n: n('none') })].filter(Boolean).join(' · ');
+  const rest = [n('small') && tr('tnSmall', { n: n('small') }), n('at') && tr('tnAt', { n: n('at') }), n('ok') && tr('tnOk', { n: n('ok') }), n('none') && tr('tnWait', { n: n('none') })].filter(Boolean).join(' · ');
   const head = on.length ? `<span class="gd">${tr(on.length === 1 ? 'tCan1' : 'tCan', { n: on.length })}</span>${more ? ` · <b class="gd">${num(more)}</b>` : ''}<br>${on.map(([t, p]) => `<button type="button" class="tbl" data-tgo="${esc(t.id)}">${esc(coin(t))} ${trailOf(t, p).more != null ? num(trailOf(t, p).more) : ''}</button>`).join(' ')}` : `<span class="muted">${tr('tNone')}</span>`;
   return `<div class="tban${on.length ? ' on' : ''}"><b>🔒 ${tr('tTitle')}</b> · ${head}${rest ? `<div class="muted">${rest}</div>` : ''}</div>`;
 }
 // degraus "se executar": limites de aumento (bolinha tracejada na barra) e, ao abrir, o novo médio, o risco e o ganho de cada uma
 const STEPS = new Map();
 function stepsOf(t, p, posAt, lT, rT, L) {
-  STEPS.delete(t.id);
+  STEPS.delete(t.id); STEPS.delete('out|' + t.id);
   const P = pendingPlan({ coin: coin(t), orders: S.data?.orders || [], pos: { dir: t.dir, qty: restQty(t), entry: t.entry, sl: t.sl, tps: (L?.pend || []).map((x) => ({ px: x.px })) }, price: p, rate: S.data?.rate || 0.00045 });
-  if (!P?.steps?.length) return [];
-  const n = P.steps.length;
+  if (!P?.steps?.length && !P?.beyond?.length) return [];
+  const n = P.steps.length, nb = P.beyond.length, c = esc(coin(t)), short = t.dir === 'baixa';
   const rows = P.steps.map((x, i) => ({
     lab: tr(i ? 'stepN' : 'step1', { n: i + 1, p: fmtPrice(x.px) }), lim: posAt(x.px), avg: posAt(x.avg),
     l: { t: x.risk == null ? '' : (x.risk > 0 ? '' : '🔒 ') + num(-x.risk) },
     m: { t: `${tr('avg')} ${fmtPrice(x.avg)} · ${qty(x.qty)}` }, r: { t: x.gain != null ? num(x.gain) : '' },
   }));
-  STEPS.set(t.id, steps({ id: t.id, open: S.steps.has(t.id), lT, rT, label: tr(n === 1 ? 'stepsLab1' : 'stepsLab', { n }), rows }));
+  const out = nb ? [{ t: `◌${nb > 1 ? ' ' + nb : ''}`, cls: short ? 'sell' : 'buy' }] : null; // no celular: uma etiqueta só (os preços vão no aviso e nos degraus)
+  const warn = nb ? tr(nb === 1 ? 'bWarn1' : 'bWarn', { n: nb, w: tr(short ? 'above' : 'below'), sl: fmtPrice(t.sl) }) : '';
+  const after = P.beyond.map((x, i) => ({ a: `${i + 1}ª ${fmtPrice(x.px)}`, b: (i ? tr('bTot', { q: qty(x.qty), c, p: fmtPrice(x.avg) }) : tr(short ? 'bNewS' : 'bNewB', { q: qty(x.sz), c })) + ` <span class="muted">· ${tr('noSl')} · ${tr('noTp')}</span>` }));
+  const label = [n ? tr(n === 1 ? 'stepsLab1' : 'stepsLab', { n }) : '', nb ? tr('bLab', { n: nb }) : ''].filter(Boolean).join(' · ');
+  STEPS.set(t.id, steps({ id: t.id, open: S.steps.has(t.id), lT, rT, out, label, rows, warn, after }));
+  if (out) STEPS.set('out|' + t.id, out);
   return P.steps.map((x) => posAt(x.px));
 }
 // sem TP (opção A): vermelho até o SL; lado do lucro listrado "sem TP" com o mesmo tamanho do risco (1R)
@@ -203,7 +209,7 @@ function noTpBar(t, p, pl, L, sl) {
   const posAt = (q) => { const d = s * (q - t.entry); return d <= 0 ? ent * (1 - Math.min(1, -d / risk)) : ent + (1 - ent) * Math.min(1, d / risk); };
   const slV = L.ifSl != null ? L.ifSl - L.realized : null, over = p && s * (p - r1) > 0;
   const lT = fmtPrice(sl), rT = '1R ' + fmtPrice(r1);
-  return ruler({ k: ent, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), trail: trailX(t, p, posAt), chip: chipOf(pl), mode: 'nt', tw: rgTw(lT, rT),
+  return ruler({ k: ent, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), out: STEPS.get('out|' + t.id), trail: trailX(t, p, posAt), chip: chipOf(pl), mode: 'nt', tw: rgTw(lT, rT),
     left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'mu' },
     bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: tr('noTp') + (over ? ' ▸' : ''), cls: 'mu' } } });
 }
@@ -250,7 +256,7 @@ function bar(t, p, pl, roe, L) {
   const tail = unc > 0.005 ? posAt(L.levels[nA - 1].px) : null;
   const rest = L.pend.reduce((a, x) => a + x.net, 0);
   const lT = fmtPrice(sl), rT = fmtPrice(last);
-  return ruler({ k: RED, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), trail: trailX(t, p, posAt), dots, tail, chip: chipOf(pl), tw: rgTw(lT, rT),
+  return ruler({ k: RED, pos: p ? posAt(p) : null, cap: capOf(t, p, posAt), lims: stepsOf(t, p, posAt, lT, rT, L), out: STEPS.get('out|' + t.id), trail: trailX(t, p, posAt), dots, tail, chip: chipOf(pl), tw: rgTw(lT, rT),
     left: { t: lT, cls: 'sh' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: num(slV), cls: 'sh' }, m: { t: fmtPrice(t.entry) }, r: { t: L.pend.length ? num(rest) : '', cls: 'lg', sub: nA > 1 ? (nD ? tr('tpsOf', { d: nD, a: nA }) : tr('tps', { a: nA })) : '' } } });
 }
