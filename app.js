@@ -1,7 +1,7 @@
 // Radar Mobile: suas posições da Hyperliquid no celular. Somente leitura (sem chave privada, sem ordens).
 // O endereço fica só neste aparelho (localStorage). Nada vem preenchido.
-import { hlState, hlOpenOrders, hlFills, hlFunding, hlFees, hlMarket, hlKlines, isAddress } from './lib/hyperliquid.js';
-import { trailSuggest, trailState, DEFAULT_TRAIL } from './lib/trailsl.js';
+import { hlState, hlOpenOrders, hlFills, hlFunding, hlFees, hlMarket, hlKlines, isAddress, dexOf } from './lib/hyperliquid.js';
+import { trailSuggest, trailState, DEFAULT_TRAIL, TRAIL_MODES } from './lib/trailsl.js';
 import { slimFill, slimFund, slimOrder, buildTrades } from './lib/hltrades.js';
 import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice, setPriceLocale } from './lib/format.js';
@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.33';
+const VERSION = '1.0.36';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -57,6 +57,9 @@ async function load() {
     const [market, state, orders, fills, fund, fees] = await Promise.all([
       hlMarket(), hlState(S.addr), hlOpenOrders(S.addr), hlFills(S.addr, since), hlFunding(S.addr, since), hlFees(S.addr).catch(() => null),
     ]);
+    // posições/ordens em corretoras HIP-3 (ex.: xyz:GOLD): busca o preço dessas também
+    const dx = [...new Set([...(state.assetPositions || []).map((ap) => ap.position?.coin), ...(orders || []).map((o) => o.coin)].map(dexOf).filter(Boolean))];
+    if (dx.length) { try { Object.assign(market, await hlMarket(dx, { base: false })); } catch { /* segue sem */ } }
     const raw = { fills: fills.map(slimFill), funding: fund.filter((f) => f.delta?.usdc != null).map(slimFund), since };
     const { trades } = buildTrades(raw, state, orders);
     // guarda o TP/SL de cada posição aberta; quando ela fecha, o trade herda e diz se saiu no TP ou no stop
@@ -135,14 +138,15 @@ function lockBar(t, p, pl, L, sl, far) {
     left: { t: lT, cls: 'en' }, right: { t: rT, cls: 'lg' },
     bot: { l: { t: locked != null ? '🔒 ' + num(locked) : '', cls: 'lk' }, m: { t: 'SL ' + fmtPrice(sl), cls: 'lk' }, r: { t: num(more), cls: 'lg' } } });
 }
-// ----- SL móvel sugerido (último topo/fundo confirmado no 1h ± ¼ ATR): estado sempre à vista -----
+// ----- SL móvel sugerido (último topo/fundo confirmado no 1h ± ½ ATR): estado sempre à vista -----
 const TRAIL = new Map();
 const trailMin = () => ls.get('trailMin', DEFAULT_TRAIL.min);
+const trailMode = () => (TRAIL_MODES.includes(ls.get('trailMode')) ? ls.get('trailMode') : DEFAULT_TRAIL.mode);
 let trailRender = null;
 function trailOf(t, p) {
   const c = TRAIL.get(t.id);
-  if ((!c || Date.now() - c.at > 300e3 || c.sl !== t.sl) && !c?.busy) calcTrail(t, p);
-  return c?.r && c.sl === t.sl ? c.r : null;
+  if ((!c || Date.now() - c.at > 300e3 || c.sl !== t.sl || c.mode !== trailMode()) && !c?.busy) calcTrail(t, p);
+  return c?.r && c.sl === t.sl && c.mode === trailMode() ? c.r : null;
 }
 async function calcTrail(t, p) {
   const prev = TRAIL.get(t.id), sl = t.sl;
@@ -150,9 +154,9 @@ async function calcTrail(t, p) {
   let r = null;
   try {
     const cs = (await hlKlines(coin(t), '1h', 300)).filter((k) => k.ct < Date.now());
-    r = trailSuggest(cs, '1h', { dir: t.dir, entry: t.entry, qty: restQty(t), sl }, p, S.data?.rate || 0.00045, DEFAULT_TRAIL.mode);
+    r = trailSuggest(cs, '1h', { dir: t.dir, entry: t.entry, qty: restQty(t), sl }, p, S.data?.rate || 0.00045, trailMode());
   } catch { /* sem candles agora */ }
-  TRAIL.set(t.id, { at: Date.now(), r, sl, busy: false });
+  TRAIL.set(t.id, { at: Date.now(), r, sl, mode: trailMode(), busy: false });
   if (JSON.stringify(prev?.r || null) !== JSON.stringify(r) && !trailRender) trailRender = setTimeout(() => { trailRender = null; render(); }, 200);
 }
 const trailSt = (t, p) => trailState(trailOf(t, p), trailMin());
@@ -174,13 +178,13 @@ function outOf(t) {
 const stepsHtml = (id) => { const o = STEPS.get(id); return o && o.rows ? steps({ ...o, out: STEPS.get('fin|' + id) || null }) : ''; };
 function trailLine(t, p) {
   const r = trailOf(t, p), st = trailState(r, trailMin()); if (!st) return '';
-  const top = t.dir === 'baixa', piv = r.piv ? `${tr(top ? 'tTop' : 'tBot')} 1h ${fmtPrice(r.piv.p)}` : '';
+  const top = t.dir === 'baixa', piv = r.piv ? `${tr(top ? 'tTop' : 'tBot')}${r.rel ? ' ' + tr('tRel') : ''} 1h ${fmtPrice(r.piv.p)}` : '';
   const html = {
-    on: () => `<button type="button" class="tsc" data-copy="${fmtPrice(r.sug)}">${r.v > 0 || r.be ? '🔒 ' : ''}SL ${tArrow(t)} ${fmtPrice(r.sug)}${r.be ? ` (${tr('entry')})` : ''}${r.more != null ? ` · ${num(r.more)}` : ''} <u>${tr('copy')}</u></button><span class="muted">${r.be ? tr('tBe') : `${piv} ${top ? '+' : '−'} ¼ ATR`}</span>`,
+    on: () => `<button type="button" class="tsc" data-copy="${fmtPrice(r.sug)}">${r.v > 0 || r.be ? '🔒 ' : ''}SL ${tArrow(t)} ${fmtPrice(r.sug)}${r.be ? ` (${tr('entry')})` : ''}${r.more != null ? ` · ${num(r.more)}` : ''} <u>${tr('copy')}</u></button><span class="muted">${r.be ? tr('tBe') : `${piv} ${top ? '+' : '−'} ½ ATR`}</span>`,
     small: () => `<span class="tsm">SL ${tArrow(t)} ${fmtPrice(r.sug)} · ${tr('only')} ${num(r.more)}</span><span class="muted">${tr('tSmall', { v: trailMin() })}</span>`,
-    at: () => `<span class="tok">✓ ${tr(r.be ? 'tAtBe' : 'tAt')} · ${fmtPrice(t.sl)}</span><span class="muted">${r.be ? tr('tZero') : `${piv} ${top ? '+' : '−'} ¼ ATR`}</span>`,
+    at: () => `<span class="tok">✓ ${tr(r.be ? 'tAtBe' : 'tAt')} · ${fmtPrice(t.sl)}</span><span class="muted">${r.be ? tr('tZero') : `${piv} ${top ? '+' : '−'} ½ ATR`}</span>`,
     ok: () => `<span class="tok">✓ ${tr('tOk')}</span><span class="muted">${tr('tOkTx', { p: fmtPrice(r.sug) })}</span>`,
-    none: () => `<span class="tnn">⏳ ${tr(top ? 'tWaitTop' : 'tWaitBot')}</span>`,
+    none: () => `<span class="tnn">⏳ ${r.wait1R ? tr('tWait1R') : tr(top ? 'tWaitTop' : 'tWaitBot') + (r.rel ? ' (' + tr('tRel') + ')' : '')}</span>`,
   }[st]();
   return `<div class="tsl">${html}</div>`;
 }
@@ -492,6 +496,7 @@ function cfgView() {
     <div class="box"><span>${tr('cfg.wallet')}</span><b class="mono">${esc(S.addr.slice(0, 6))}…${esc(S.addr.slice(-4))}</b><small>${tr('cfg.walletSub')}</small><button id="out" class="ghost">${tr('cfg.change')}</button></div>
     <div class="box"><span>${tr('cfg.linked')}</span><b>${nMeta ? (nMeta === 1 ? '1 trade' : tr('cfg.nTrades', { n: nMeta })) : tr('cfg.none')}</b><small>${S.metaAt ? tr('cfg.backupOf', { d: dt(S.metaAt) }) : tr('cfg.impHint')}</small>
       <label class="ghost file">${tr('cfg.imp')}<input type="file" id="imp" accept="application/json,.json" hidden></label>${nMeta ? `<button id="clrm" class="ghost">${tr('cfg.clr')}</button>` : ''}</div>
+    <div class="box"><span>${tr('cfg.trail')}</span><div class="tmodes">${TRAIL_MODES.map((k) => `<button type="button" data-tmode="${k}" class="${trailMode() === k ? 'on' : ''}">${tr('tm.' + k)}</button>`).join('')}</div><small>${tr('cfg.trailSub')}</small></div>
     <div class="box"><span>${tr('cfg.refresh')}</span><b>${tr('cfg.every')}</b><small>${tr('cfg.refreshSub')}</small></div>
     <p class="ver">Radar Mobile v${VERSION}</p></section>`;
 }
@@ -500,6 +505,7 @@ function cfgView() {
 function bind() {
   $('#ref').onclick = () => load();
   bindLang();
+  document.querySelectorAll('button[data-tmode]').forEach((b) => (b.onclick = () => { ls.set('trailMode', b.dataset.tmode); TRAIL.clear(); render(); }));
   document.querySelectorAll('button[data-theme]').forEach((b) => (b.onclick = () => { ls.set('theme', b.dataset.theme); applyTheme(b.dataset.theme); render(); }));
   document.querySelectorAll('nav [data-tab]').forEach((b) => (b.onclick = () => { S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); }));
   document.querySelectorAll('[data-sort]').forEach((b) => (b.onclick = () => {

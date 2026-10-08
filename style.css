@@ -128,6 +128,10 @@ article .h .now.pos b, article .h .now.pos em { color: var(--teal); } article .h
 .lang button { border: 0; background: none; color: var(--head); padding: 6px 12px; border-radius: 6px; font-size: 13px; }
 .lang button.on { background: #1c2b30; color: var(--txt); font-weight: 600; }
 .cfg .box .lang { margin: 2px 0; }
+.tmodes { display: flex; flex-direction: column; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; margin: 2px 0; }
+.tmodes button { border: 0; background: none; color: var(--head); padding: 8px 12px; border-radius: 6px; font-size: 13px; text-align: left; }
+.tmodes button.on { background: #1c2b30; color: var(--txt); font-weight: 600; }
+html[data-theme=light] .tmodes button.on { background: #e5edef; }
 
 /* v1.0.8: valores da barra numa camada por cima do brilho, sempre legíveis */
 .txl { position: absolute; inset: 0; display: flex; z-index: 3; pointer-events: none; }
