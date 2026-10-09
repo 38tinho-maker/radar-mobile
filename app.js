@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.40';
+const VERSION = '1.0.41';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -439,28 +439,52 @@ const CHART = new Set();
 function miniChart(t, p) {
   const c = TRAIL.get(t.id), cs = c?.cs;
   if (!cs?.length) return `<div class="mch empty">${tr('chLoading')}</div>`;
-  const N = 48, k = cs.slice(-N), W = 320, H = 150, R = 6;
+  const N = 48, k = cs.slice(-N), W = 340, H = 176, TOP = 16, BOT = 18, LW = 122; // LW: coluna das etiquetas
   const z = zigzag(cs), n = cs.length;
   const intact = (x, top) => !cs.slice(x.i + 1).some((q) => (top ? q.h > x.p : q.l < x.p));
   const topP = [...z.highs].reverse().find((x) => intact(x, true)), botP = [...z.lows].reverse().find((x) => intact(x, false));
   const sug = c.r && !c.r.none && trailState(c.r, trailMin()) === 'on' ? c.r.sug : null;
-  const lv = [t.entry, t.sl, t.tp, sug, p].filter((v) => v != null && isFinite(v));
+  const s = t.dir === 'baixa' ? -1 : 1, locked = t.sl != null && s * (t.sl - t.entry) > 0;
+  const now = p ?? k[k.length - 1].c;
+  // escala: só os candles e o que está perto (SL, SL sugerido, preço, topo/fundo); o resto vira seta na borda
   let hi = Math.max(...k.map((x) => x.h)), lo = Math.min(...k.map((x) => x.l));
-  for (const v of lv) { if (Math.abs(v - (hi + lo) / 2) < (hi - lo) * 2) { hi = Math.max(hi, v); lo = Math.min(lo, v); } } // não deixa um TP muito longe achatar tudo
-  const pad = (hi - lo) * 0.08 || 1; hi += pad; lo -= pad;
-  const y = (v) => R + (hi - v) / (hi - lo) * (H - 2 * R), bw = (W - 60) / N, x = (i) => 4 + (i + 0.5) * bw;
+  const span0 = hi - lo || now * 0.01;
+  for (const v of [t.sl, sug, now, topP?.p, botP?.p]) if (v != null && isFinite(v) && v < hi + span0 * 0.6 && v > lo - span0 * 0.6) { hi = Math.max(hi, v); lo = Math.min(lo, v); }
+  const pad = (hi - lo) * 0.06 || 1; hi += pad; lo -= pad;
+  const y = (v) => TOP + (hi - v) / (hi - lo) * (H - TOP - BOT), bw = (W - LW - 6) / N, x = (i) => 4 + (i + 0.5) * bw, xr = W - LW;
   let g = '';
-  k.forEach((q, i) => { const up = q.c >= q.o, col = up ? 'var(--up,#26a69a)' : 'var(--down,#ef5350)'; g += `<line x1="${x(i)}" x2="${x(i)}" y1="${y(q.h)}" y2="${y(q.l)}" stroke="${col}"/><rect x="${x(i) - bw * 0.3}" y="${y(Math.max(q.o, q.c))}" width="${bw * 0.6}" height="${Math.max(1, y(Math.min(q.o, q.c)) - y(Math.max(q.o, q.c)))}" fill="${col}"/>`; });
-  const labs = []; // etiquetas da direita: afastadas para não encavalar
-  const lineAt = (v, col, lab, dash = '') => { if (v == null || v > hi || v < lo) return ''; labs.push({ y: y(v), col, lab }); return `<line x1="0" x2="${W - 58}" y1="${y(v)}" y2="${y(v)}" stroke="${col}" stroke-width="1.2"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`; };
-  const locked = t.sl != null && (t.dir === 'baixa' ? -1 : 1) * (t.sl - t.entry) > 0;
-  g += lineAt(t.entry, '#e6e8ee', fmtPrice(t.entry), '4 3') + lineAt(t.sl, locked ? '#e8c46a' : '#ef5350', fmtPrice(t.sl)) + lineAt(t.tp, '#26a69a', fmtPrice(t.tp)) + lineAt(sug, '#e8c46a', fmtPrice(sug), '5 3') + lineAt(p, '#9aa3b2', fmtPrice(p), '1 3');
-  const mark = (m, top) => { if (!m) return ''; const i = m.i - (n - N); if (i < 0) return ''; const cy = y(m.p) + (top ? -5 : 5), col = top ? '#f0a35e' : '#6fa8ff'; return `<path d="M${x(i)} ${cy} l-4 ${top ? -7 : 7} h8z" fill="${col}"/>`; };
+  // faixa entre o preço e o SL: dourada se o SL já trava lucro, vermelha se ainda é risco
+  if (t.sl != null && t.sl < hi && t.sl > lo) { const y1 = y(now), y2 = y(t.sl); g += `<rect x="0" y="${Math.min(y1, y2)}" width="${xr}" height="${Math.abs(y2 - y1)}" fill="${locked ? '#e8c46a' : '#ef5350'}" opacity=".08"/>`; }
+  // horas: -48h · -24h · agora
+  for (const [i, lab] of [[0, '−48h'], [24, '−24h']]) if (k[i]) g += `<line x1="${x(i)}" x2="${x(i)}" y1="${TOP - 4}" y2="${H - BOT}" stroke="#2a2e39" stroke-dasharray="2 3"/><text x="${x(i) + 2}" y="${H - 5}" fill="#6d7480" font-size="9">${lab}</text>`;
+  k.forEach((q, i) => { const up = q.c >= q.o, col = up ? '#26a69a' : '#ef5350'; g += `<line x1="${x(i)}" x2="${x(i)}" y1="${y(q.h)}" y2="${y(q.l)}" stroke="${col}"/><rect x="${x(i) - bw * 0.32}" y="${y(Math.max(q.o, q.c))}" width="${bw * 0.64}" height="${Math.max(1, y(Math.min(q.o, q.c)) - y(Math.max(q.o, q.c)))}" fill="${col}"/>`; });
+  // linhas com nome; quase iguais viram uma só ("entrada ≈ agora")
+  const L0 = [
+    { v: t.sl, col: locked ? '#e8c46a' : '#ef5350', nm: 'SL', w: 1.4 },
+    { v: sug, col: '#e8c46a', nm: tr('chSugS'), dash: '5 3' },
+    { v: t.tp, col: '#26a69a', nm: 'TP' },
+    { v: t.entry, col: '#e6e8ee', nm: tr('entry'), dash: '4 3' },
+    { v: now, col: '#9aa3b2', nm: tr('chNow'), dash: '1 3' },
+  ].filter((L) => L.v != null && isFinite(L.v));
+  const L = [];
+  for (const a of L0) { const o = L.find((b) => Math.abs(b.v - a.v) <= Math.abs(a.v) * 0.0012); if (o) o.nm += '≈' + a.nm; else L.push({ ...a }); }
+  const labs = [], up = [], dn = [];
+  for (const l of L) {
+    if (l.v > hi) { up.push(l); continue; } if (l.v < lo) { dn.push(l); continue; }
+    g += `<line x1="0" x2="${xr - 2}" y1="${y(l.v)}" y2="${y(l.v)}" stroke="${l.col}" stroke-width="${l.w || 1.1}"${l.dash ? ` stroke-dasharray="${l.dash}"` : ''}/>`;
+    labs.push({ y: y(l.v), col: l.col, t: `${l.nm} ${fmtPrice(l.v)}` });
+  }
+  labs.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < 12) labs[i].y = labs[i - 1].y + 12;
+  for (const l of labs) g += `<text x="${xr + 2}" y="${l.y + 3.5}" fill="${l.col}" font-size="9" font-family="IBM Plex Mono,monospace">${esc(l.t)}</text>`;
+  // fora da tela: setinha na borda com a distância do preço
+  const dist = (v) => `${v >= now ? '+' : '−'}${fmt1(Math.abs(v / now - 1) * 100)}%`;
+  up.forEach((l, i) => { g += `<text x="${xr + 2}" y="${10 + i * 11}" fill="${l.col}" font-size="9" font-family="IBM Plex Mono,monospace">↑${esc(l.nm)} ${fmtPrice(l.v)} ${dist(l.v)}</text>`; });
+  dn.forEach((l, i) => { g += `<text x="${xr + 2}" y="${H - 6 - i * 11}" fill="${l.col}" font-size="9" font-family="IBM Plex Mono,monospace">↓${esc(l.nm)} ${fmtPrice(l.v)} ${dist(l.v)}</text>`; });
+  // topo/fundo relevante com o preço ao lado
+  const mark = (m, top) => { if (!m) return ''; const i = m.i - (n - N); if (i < 0) return ''; const cy = y(m.p) + (top ? -4 : 4), col = top ? '#f0a35e' : '#6fa8ff', tx = Math.min(x(i) + 6, xr - 54); return `<path d="M${x(i)} ${cy} l-4 ${top ? -7 : 7} h8z" fill="${col}"/><text x="${tx}" y="${top ? cy - 3 : cy + 11}" fill="${col}" font-size="9" font-family="IBM Plex Mono,monospace">${fmtPrice(m.p)}</text>`; };
   g += mark(topP, true) + mark(botP, false);
-  labs.sort((u, v) => u.y - v.y);
-  for (let i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < 11) labs[i].y = labs[i - 1].y + 11;
-  for (const L of labs) g += `<text x="${W - 56}" y="${L.y + 3.5}" fill="${L.col}" font-size="9.5" font-family="monospace">${L.lab}</text>`;
-  return `<div class="mch"><svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none">${g}</svg><div class="mchl"><span><i style="background:#e6e8ee"></i>${tr('entry')}</span><span><i style="background:${locked ? '#e8c46a' : '#ef5350'}"></i>SL</span>${t.tp ? '<span><i style="background:#26a69a"></i>TP</span>' : ''}${sug != null ? `<span><i style="background:#e8c46a"></i>${tr('chSug')}</span>` : ''}<span><b style="color:#f0a35e">▼</b><b style="color:#6fa8ff">▲</b> ${tr('chPiv')}</span></div></div>`;
+  return `<div class="mch"><svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet">${g}</svg><div class="mchl"><span><b style="color:#f0a35e">▼</b><b style="color:#6fa8ff">▲</b> ${tr('chPiv')}</span><span><i style="background:${locked ? '#e8c46a' : '#ef5350'};height:8px;opacity:.35"></i>${tr(locked ? 'chLock' : 'chRisk')}</span></div></div>`;
 }
 // ---------- Finalizados: ficam até você dispensar ----------
 function finView() {
