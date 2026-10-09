@@ -1,7 +1,7 @@
 // Radar Mobile: suas posições da Hyperliquid no celular. Somente leitura (sem chave privada, sem ordens).
 // O endereço fica só neste aparelho (localStorage). Nada vem preenchido.
 import { hlState, hlOpenOrders, hlFills, hlFunding, hlFees, hlMarket, hlKlines, isAddress, dexOf } from './lib/hyperliquid.js';
-import { trailSuggest, trailState, DEFAULT_TRAIL, TRAIL_MODES } from './lib/trailsl.js';
+import { trailSuggest, trailState, DEFAULT_TRAIL, TRAIL_MODES, TRAIL_VER, zigzag } from './lib/trailsl.js';
 import { slimFill, slimFund, slimOrder, buildTrades } from './lib/hltrades.js';
 import { ladder, restQty, origQty } from './lib/partials.js';
 import { fmtPrice, setPriceLocale } from './lib/format.js';
@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.38';
+const VERSION = '1.0.40';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -151,12 +151,12 @@ function trailOf(t, p) {
 async function calcTrail(t, p) {
   const prev = TRAIL.get(t.id), sl = t.sl;
   TRAIL.set(t.id, { ...(prev || {}), busy: true });
-  let r = null;
+  let r = null, cs0 = null;
   try {
-    const cs = (await hlKlines(coin(t), '1h', 300)).filter((k) => k.ct < Date.now());
+    const cs = (await hlKlines(coin(t), '1h', 300)).filter((k) => k.ct < Date.now()); cs0 = cs;
     r = trailSuggest(cs, '1h', { dir: t.dir, entry: t.entry, qty: restQty(t), sl }, p, S.data?.rate || 0.00045, trailMode());
   } catch { /* sem candles agora */ }
-  TRAIL.set(t.id, { at: Date.now(), r, sl, mode: trailMode(), busy: false });
+  TRAIL.set(t.id, { at: Date.now(), r, sl, mode: trailMode(), busy: false, cs: cs0 });
   if (JSON.stringify(prev?.r || null) !== JSON.stringify(r) && !trailRender) trailRender = setTimeout(() => { trailRender = null; render(); }, 200);
 }
 const trailSt = (t, p) => trailState(trailOf(t, p), trailMin());
@@ -288,6 +288,7 @@ function render() {
   let body;
   try { body = S.tab === 'pos' ? posView() : S.tab === 'ord' ? ordView() : S.tab === 'hist' ? histView() : cfgView(); }
   catch (e) { console.error('[Radar Mobile] render', e); body = `<div class="err">${esc(tr('renderErr', { v: VERSION }))}<br><small>${esc(String(e?.message || e))}</small></div>`; }
+  if (S.tab === 'pos' || S.tab === 'cfg') body = verBanner() + body;
   app.innerHTML = `<header><b>${S.tab === 'pos' ? 'Radar Mobile' : tr('tab.' + S.tab)}</b><button id="ref" class="upd">${updTxt()}</button></header>
     ${S.err ? `<div class="err">${esc(tr(S.err))}</div>` : ''}
     <main id="main">${body}</main>
@@ -331,6 +332,13 @@ function slProg(t, p) {
   let ref = t.entry;
   if (s * (t.sl - t.entry) >= 0) { const bw = bestWorst(EXT.get(t.id), t, p); ref = bw?.best != null && s * (bw.best - p) > 0 ? bw.best : p; }
   return t.sl !== ref ? (p - ref) / (t.sl - ref) : null;
+}
+// aviso: a extensão (pelo último backup importado) está numa versão mais nova que este celular
+const vnum = (v) => String(v || '0').split('.').map((x) => +x || 0).reduce((a, x) => a * 1000 + x, 0);
+function verBanner() {
+  const E = ls.get('extInfo'); if (!E) return '';
+  const old = (E.mobile && vnum(E.mobile) > vnum(VERSION)) || (E.ruleVer && E.ruleVer > TRAIL_VER);
+  return old ? `<div class="verwarn">⚠ <b>${tr('vOld', { v: VERSION })}</b><br>${tr('vOldTx', { e: E.mobile || '?' })}</div>` : '';
 }
 function posView() {
   if (!S.data) return `<div class="empty">${tr(S.loading ? 'loadingPos' : 'noData')}</div>`;
@@ -422,8 +430,37 @@ function card({ t, p, L, pl, roe, liqD, slP, tpP, tpN, slD, tpD }) {
     <div class="h"><b class="coin">${esc(coin(t))}</b><span class="sd ${side}">${tr(t.dir === 'baixa' ? 'short' : 'long').toUpperCase()}</span>${t.lev ? `<span class="lev">${fmt1(t.lev)}x</span>` : ''}${hk === 'open' && t.openedAt ? `<span class="lev">· ${dur(Date.now() - t.openedAt)}</span>` : ''}<span class="grow"></span>${pl != null && isFinite(pl) ? `<span class="now ${cls(pl)}"><b>${usd(pl)}</b><em>${roe != null && isFinite(roe) ? pct(roe) : ''}</em></span>` : ''}</div>
     ${(STEPS.delete(t.id), STEPS.delete('gold|' + t.id), bar(t, p, pl, roe, L))}
     ${dist}${trailLine(t, p)}${S.ords.has(t.id) && os.length ? ordList(os) : ''}${stepsHtml(t.id)}${rrv}
+    <button type="button" class="chb" data-chart="${esc(t.id)}">${CHART.has(t.id) ? '▾ ' + tr('chHide') : '▸ ' + tr('chShow')}</button>${CHART.has(t.id) ? miniChart(t, p) : ''}
     <div class="fg">${cell(tr('mark'), p ? fmtPrice(p) : '—', 'wht')}${cell(tr('liq'), liqTx, isFinite(liqD) && liqD < 0.1 ? 'warn' : '')}${cell(tr('margin'), t.margin ? usd(t.margin, false) : '—')}${cell(tr('size'), `${qty(t.qty)}${partial ? `<small>/${qty(origQty(t))}</small>` : ''}`)}</div>
     ${op ? detail(t, p, L) : ''}</article>`;
+}
+// ---------- Mini-gráfico de 1h (últimas ~48 h): entrada, SL, TP, SL sugerido e topo/fundo relevante ----------
+const CHART = new Set();
+function miniChart(t, p) {
+  const c = TRAIL.get(t.id), cs = c?.cs;
+  if (!cs?.length) return `<div class="mch empty">${tr('chLoading')}</div>`;
+  const N = 48, k = cs.slice(-N), W = 320, H = 150, R = 6;
+  const z = zigzag(cs), n = cs.length;
+  const intact = (x, top) => !cs.slice(x.i + 1).some((q) => (top ? q.h > x.p : q.l < x.p));
+  const topP = [...z.highs].reverse().find((x) => intact(x, true)), botP = [...z.lows].reverse().find((x) => intact(x, false));
+  const sug = c.r && !c.r.none && trailState(c.r, trailMin()) === 'on' ? c.r.sug : null;
+  const lv = [t.entry, t.sl, t.tp, sug, p].filter((v) => v != null && isFinite(v));
+  let hi = Math.max(...k.map((x) => x.h)), lo = Math.min(...k.map((x) => x.l));
+  for (const v of lv) { if (Math.abs(v - (hi + lo) / 2) < (hi - lo) * 2) { hi = Math.max(hi, v); lo = Math.min(lo, v); } } // não deixa um TP muito longe achatar tudo
+  const pad = (hi - lo) * 0.08 || 1; hi += pad; lo -= pad;
+  const y = (v) => R + (hi - v) / (hi - lo) * (H - 2 * R), bw = (W - 60) / N, x = (i) => 4 + (i + 0.5) * bw;
+  let g = '';
+  k.forEach((q, i) => { const up = q.c >= q.o, col = up ? 'var(--up,#26a69a)' : 'var(--down,#ef5350)'; g += `<line x1="${x(i)}" x2="${x(i)}" y1="${y(q.h)}" y2="${y(q.l)}" stroke="${col}"/><rect x="${x(i) - bw * 0.3}" y="${y(Math.max(q.o, q.c))}" width="${bw * 0.6}" height="${Math.max(1, y(Math.min(q.o, q.c)) - y(Math.max(q.o, q.c)))}" fill="${col}"/>`; });
+  const labs = []; // etiquetas da direita: afastadas para não encavalar
+  const lineAt = (v, col, lab, dash = '') => { if (v == null || v > hi || v < lo) return ''; labs.push({ y: y(v), col, lab }); return `<line x1="0" x2="${W - 58}" y1="${y(v)}" y2="${y(v)}" stroke="${col}" stroke-width="1.2"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`; };
+  const locked = t.sl != null && (t.dir === 'baixa' ? -1 : 1) * (t.sl - t.entry) > 0;
+  g += lineAt(t.entry, '#e6e8ee', fmtPrice(t.entry), '4 3') + lineAt(t.sl, locked ? '#e8c46a' : '#ef5350', fmtPrice(t.sl)) + lineAt(t.tp, '#26a69a', fmtPrice(t.tp)) + lineAt(sug, '#e8c46a', fmtPrice(sug), '5 3') + lineAt(p, '#9aa3b2', fmtPrice(p), '1 3');
+  const mark = (m, top) => { if (!m) return ''; const i = m.i - (n - N); if (i < 0) return ''; const cy = y(m.p) + (top ? -5 : 5), col = top ? '#f0a35e' : '#6fa8ff'; return `<path d="M${x(i)} ${cy} l-4 ${top ? -7 : 7} h8z" fill="${col}"/>`; };
+  g += mark(topP, true) + mark(botP, false);
+  labs.sort((u, v) => u.y - v.y);
+  for (let i = 1; i < labs.length; i++) if (labs[i].y - labs[i - 1].y < 11) labs[i].y = labs[i - 1].y + 11;
+  for (const L of labs) g += `<text x="${W - 56}" y="${L.y + 3.5}" fill="${L.col}" font-size="9.5" font-family="monospace">${L.lab}</text>`;
+  return `<div class="mch"><svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none">${g}</svg><div class="mchl"><span><i style="background:#e6e8ee"></i>${tr('entry')}</span><span><i style="background:${locked ? '#e8c46a' : '#ef5350'}"></i>SL</span>${t.tp ? '<span><i style="background:#26a69a"></i>TP</span>' : ''}${sug != null ? `<span><i style="background:#e8c46a"></i>${tr('chSug')}</span>` : ''}<span><b style="color:#f0a35e">▼</b><b style="color:#6fa8ff">▲</b> ${tr('chPiv')}</span></div></div>`;
 }
 // ---------- Finalizados: ficam até você dispensar ----------
 function finView() {
@@ -498,7 +535,7 @@ function cfgView() {
       <label class="ghost file">${tr('cfg.imp')}<input type="file" id="imp" accept="application/json,.json" hidden></label>${nMeta ? `<button id="clrm" class="ghost">${tr('cfg.clr')}</button>` : ''}</div>
     <div class="box"><span>${tr('cfg.trail')}</span><div class="tmodes">${TRAIL_MODES.map((k) => `<button type="button" data-tmode="${k}" class="${trailMode() === k ? 'on' : ''}">${tr('tm.' + k)}</button>`).join('')}</div><small>${tr('cfg.trailSub')}</small></div>
     <div class="box"><span>${tr('cfg.refresh')}</span><b>${tr('cfg.every')}</b><small>${tr('cfg.refreshSub')}</small></div>
-    <p class="ver">Radar Mobile v${VERSION}</p></section>`;
+    <p class="ver">Radar Mobile v${VERSION} · ${tr('cfg.rule', { r: TRAIL_VER })}</p></section>`;
 }
 
 // ---------- eventos ----------
@@ -519,6 +556,8 @@ function bind() {
   document.querySelectorAll('[data-copy]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const u = b.querySelector('u') || b; navigator.clipboard?.writeText(/^pt/.test(loc()) ? b.dataset.copy.replace(/[.\s]/g, '').replace(',', '.') : b.dataset.copy.replace(/[,\s]/g, '')).then(() => { u.textContent = '✓'; setTimeout(() => { u.textContent = tr('copy'); }, 1500); }).catch(() => {}); }));
   document.querySelectorAll('[data-tgo]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const a = document.querySelector(`article.pc[data-id="${CSS.escape(b.dataset.tgo)}"]`); if (a) { a.scrollIntoView({ block: 'center', behavior: 'smooth' }); a.classList.add('tflash'); setTimeout(() => a.classList.remove('tflash'), 1600); } }));
   document.querySelectorAll('[data-steps]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.steps; S.steps.has(id) ? S.steps.delete(id) : S.steps.add(id); render(); }));
+  document.querySelectorAll('[data-chart]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.chart; CHART.has(id) ? CHART.delete(id) : CHART.add(id); render(); }));
+  document.querySelectorAll('.mch').forEach((m) => (m.onclick = (e) => e.stopPropagation()));
   document.querySelectorAll('[data-ords]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); const id = b.dataset.ords; S.ords.has(id) ? S.ords.delete(id) : S.ords.add(id); render(); }));
   document.querySelectorAll('article.pc').forEach((a) => (a.onclick = () => { const id = a.dataset.id; S.open.has(id) ? S.open.delete(id) : S.open.add(id); render(); }));
   const out = $('#out'); if (out) out.onclick = () => { if (!confirm(tr('confirmOut'))) return; S.addr = null; S.data = null; ls.del('addr'); render(); };
@@ -532,6 +571,8 @@ function bind() {
       // só os vínculos (padrão, tf, origem); nada de endereço ou valores
       const meta = {};
       for (const [id, m] of Object.entries(data.hlMeta)) if (m?.patternName) meta[id] = { patternName: m.patternName, tf: m.tf || null, src: m.src || null, auto: !!m.auto };
+      // versões que a extensão espera (para avisar se este celular ficou para trás)
+      if (data.mobile || data.ruleVer) ls.set('extInfo', { mobile: data.mobile || null, ruleVer: data.ruleVer || null, ext: data.version || null });
       S.meta = meta; S.metaAt = Date.parse(data.exportedAt) || Date.now();
       ls.set('meta', meta); ls.set('metaAt', S.metaAt); render();
     } catch { alert(tr('badFile')); }

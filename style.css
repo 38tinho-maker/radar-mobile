@@ -351,3 +351,11 @@ html[data-theme=light] .tbl { color: #8a6510; }
 .st-a .c-sh { color: var(--red); } .st-al .muted { color: var(--mut); }
 .rg-ts.at { top: -1px; width: 18px; height: 18px; margin-left: -9px; background: transparent; border: 2px solid #e8c46a; box-sizing: border-box; box-shadow: 0 0 6px rgba(232,196,106,.6); }
 .rg-ox.gold { color: #e8c46a; border-color: rgba(232,196,106,.7); }
+.verwarn { margin: 10px 12px 0; background: #2a2216; border: 1px solid #5a4a2a; color: #f0c48a; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.45; }
+/* mini-gráfico de 1h no card da posição */
+.chb { margin-top: 8px; background: none; border: 0; padding: 2px 0; color: var(--head); font-size: 12.5px; }
+.mch { margin-top: 6px; background: rgba(0,0,0,.18); border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
+.mch svg { display: block; height: 150px; }
+.mch.empty { color: var(--mut); font-size: 12px; padding: 12px; }
+.mchl { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 10.5px; color: var(--mut); margin-top: 4px; }
+.mchl i { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 4px; }
