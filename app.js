@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.37';
+const VERSION = '1.0.38';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
@@ -183,7 +183,7 @@ function trailLine(t, p) {
     on: () => `<button type="button" class="tsc" data-copy="${fmtPrice(r.sug)}">${r.v > 0 || r.be ? '🔒 ' : ''}SL ${tArrow(t)} ${fmtPrice(r.sug)}${r.be ? ` (${tr('entry')})` : ''}${r.more != null ? ` · ${num(r.more)}` : ''} <u>${tr('copy')}</u></button><span class="muted">${r.be ? tr('tBe') : `${piv} ${top ? '+' : '−'} ½ ATR`}</span>`,
     small: () => `<span class="tsm">SL ${tArrow(t)} ${fmtPrice(r.sug)} · ${tr('only')} ${num(r.more)}</span><span class="muted">${tr('tSmall', { v: trailMin() })}</span>`,
     at: () => `<span class="tok">✓ ${tr(r.be ? 'tAtBe' : 'tAt')} · ${fmtPrice(t.sl)}</span><span class="muted">${r.be ? tr('tZero') : `${piv} ${top ? '+' : '−'} ½ ATR`}</span>`,
-    ok: () => `<span class="tok">✓ ${tr('tOk')}</span><span class="muted">${tr('tOkTx', { p: fmtPrice(r.sug) })}</span>`,
+    ok: () => `<span class="tok">✓ ${tr('tOk')}</span><span class="muted">${tr('tOkTx', { p: fmtPrice(r.sug) + (piv ? ' · ' + piv : '') })}</span>`,
     none: () => `<span class="tnn">⏳ ${r.wait1R ? tr('tWait1R') : tr(top ? 'tWaitTop' : 'tWaitBot') + (r.rel ? ' (' + tr('tRel') + ')' : '')}</span>`,
   }[st]();
   return `<div class="tsl">${html}</div>`;

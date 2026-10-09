@@ -323,8 +323,8 @@ html[data-theme=light] .st-tg, html[data-theme=light] .st-l { color: #a77b12; }
 .rg-ts { position: absolute; top: 3px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #e8c46a; box-shadow: 0 0 0 2px var(--pan), 0 0 6px rgba(232,196,106,.8); z-index: 3; }
 .rg-ts.small { opacity: .45; box-shadow: 0 0 0 2px var(--pan); }
 .rg-ts.ok { background: var(--pan); border: 2px solid #e8c46a; box-sizing: border-box; opacity: .8; box-shadow: none; }
-.tsl { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; min-width: 0; }
-.tsl .muted { color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tsl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; font-size: 11px; min-width: 0; }
+.tsl .muted { color: var(--mut); min-width: 0; }
 .tsc, .tsm, .tok, .tnn { flex: none; font: 600 11.5px var(--mono); border-radius: 10px; padding: 2px 9px; white-space: nowrap; }
 .tsc { color: #e8c46a; background: rgba(232,196,106,.14); border: 1px solid rgba(232,196,106,.55); cursor: pointer; }
 .tsc u { font-weight: 400; margin-left: 4px; }
