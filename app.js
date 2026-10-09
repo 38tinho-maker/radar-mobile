@@ -11,7 +11,7 @@ import { ruler, steps } from './lib/ruler.js';
 import { pendingPlan } from './lib/pending.js';
 import { finKind, finModel, finPosAt, finResult, finList } from './lib/finished.js';
 
-const VERSION = '1.0.36';
+const VERSION = '1.0.37';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ls = {
